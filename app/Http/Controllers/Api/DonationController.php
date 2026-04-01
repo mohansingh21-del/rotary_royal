@@ -1,0 +1,169 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\Donation;
+use App\Traits\ApiResponse;
+use Illuminate\Http\Request;
+use Exception;
+use App\Models\MarqueeMessage;
+
+class DonationController extends Controller
+{
+    use ApiResponse;
+
+    /**
+     * Display a listing of donations with search and filters.
+     */
+    public function index(Request $request)
+    {
+
+        try {
+            $limit = $request->input('limit', null);
+            $page = $request->input('page', 1);
+            $search = $request->input('search', null);
+
+            $query = Donation::query();
+
+            if ($search) {
+                $query->where('donor_name', 'like', '%' . $search . '%');
+            }
+
+            if ($limit) {
+                $donations = $query->orderBy('id', 'DESC')
+                    ->paginate($limit, ['*'], 'page', $page);
+
+                $donations->getCollection()->transform(function ($donation) {
+                    return [
+                    'id' => $donation->id,
+                    'donor_name' => $donation->donor_name,
+                    'amount' => $donation->amount,
+                    'date' => $donation->date,
+                    'is_marquee' => $donation->is_marquee,
+                    ];
+                });
+
+                $response = [
+                    'data' => $donations->items(),
+                    'pagination' => [
+                        'total' => $donations->total(),
+                        'current_page' => $donations->currentPage(),
+                        'per_page' => $donations->perPage(),
+                        'last_page' => $donations->lastPage(),
+                        'from' => $donations->firstItem(),
+                        'to' => $donations->lastItem(),
+                    ]
+                ];
+            }
+            else {
+                $donations = $query->orderBy('id', 'DESC')->get();
+
+                $donations->transform(function ($donation) {
+                    return [
+                    'id' => $donation->id,
+                    'donor_name' => $donation->donor_name,
+                    'amount' => $donation->amount,
+                    'date' => $donation->date,
+                    'is_marquee' => $donation->is_marquee,
+                    ];
+                });
+
+                $response = [
+                    'data' => $donations,
+                    'pagination' => [
+                        'total' => $donations->count(),
+                        'current_page' => 1,
+                        'per_page' => $donations->count(),
+                        'last_page' => 1,
+                        'from' => $donations->isEmpty() ? 0 : 1,
+                        'to' => $donations->count(),
+                    ]
+                ];
+            }
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Donations retrieved successfully',
+                'data' => $response['data'],
+                'pagination' => $response['pagination'] ?? null,
+            ]);
+
+        }
+        catch (Exception $e) {
+            return $this->errorResponse($e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Store a new donation record.
+     */
+    public function store(Request $request)
+    {
+        $request->validate([
+            'donor_name' => 'required|string|max:255',
+            'amount' => 'required|numeric|min:0',
+            'date' => 'nullable|date',
+            'foundation_name' => 'nullable|string|max:255',
+        ]);
+
+        $donation = Donation::create([
+            'donor_name' => $request->donor_name,
+            'amount' => $request->amount,
+            'date' => $request->date ?? now()->toDateString(),
+            'foundation_name' => $request->foundation_name,
+            'is_marquee' => true, // Default to true as requested
+        ]);
+
+        return $this->successResponse($donation, 'Donation recorded successfully', 201);
+    }
+
+    /**
+     * Toggle the marquee status of a donation.
+     */
+    public function toggleMarquee(Request $request, Donation $donation)
+    {
+        try {
+            $donation->is_marquee = !$donation->is_marquee;
+            $donation->save();
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Marquee status updated successfully',
+                'data' => $donation,
+            ]);
+        }
+        catch (Exception $e) {
+            return $this->errorResponse($e->getMessage(), 500);
+        }
+    }
+
+    public function storeMarqueeMessage(Request $request)
+    {
+        try {
+            $request->validate([
+                'marquee_message' => 'required|string|max:255',
+            ]);
+            $marqueeMessage = MarqueeMessage::first();
+            if ($marqueeMessage) {
+                $marqueeMessage->update([
+                    'marquee_message' => $request->marquee_message,
+                ]);
+            }
+            else {
+                $marqueeMessage = MarqueeMessage::create([
+                    'marquee_message' => $request->marquee_message,
+                ]);
+            }
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Marquee message stored successfully',
+                'data' => $marqueeMessage,
+            ]);
+        }
+        catch (Exception $e) {
+            return $this->errorResponse($e->getMessage(), 500);
+        }
+    }
+}
