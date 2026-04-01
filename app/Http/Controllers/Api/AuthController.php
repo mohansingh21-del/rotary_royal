@@ -69,6 +69,12 @@ class AuthController extends Controller
             'email' => 'required|email',
         ]);
 
+        $user = User::where('email', $request->email)->first();
+
+        if (!$user) {
+            return $this->errorResponse('No account found with this email', 404);
+        }
+
         $key = 'send-otp:' . $request->email;
 
         if (RateLimiter::tooManyAttempts($key, 3)) {
@@ -90,7 +96,6 @@ class AuthController extends Controller
             'created_at' => now(),
         ]);
 
-        $user = User::where('email', $request->email)->first();
         $user->notify(new ResetPasswordNotification($otp));
 
         if (config('app.env') === 'local') {
