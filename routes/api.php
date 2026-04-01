@@ -26,6 +26,7 @@ Route::prefix('v1')->group(function () {
     Route::post('bookings', [BookingController::class , 'store']); // Public Booking Creator (Guest Friendly)
     Route::get('assets', [AssetController::class , 'index']);
     Route::get('banners', [BannerController::class , 'publicBanners']);
+    Route::get('members', [UserController::class , 'activeMembers']);
 
     // Protected Admin Routes
     Route::middleware('auth:sanctum')->prefix('admin')->group(function () {

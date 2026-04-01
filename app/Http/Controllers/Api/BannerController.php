@@ -147,7 +147,7 @@ class BannerController extends Controller
     {
         try {
             $banner = Banner::findOrFail($id);
-            $banner->status = ($banner->status === 'Active') ? 'Inactive' : 'Active';
+            $banner->status = ($banner->status == 1) ? 0 : 1;
             $banner->save();
 
             return $this->successResponse($banner, 'Banner status updated successfully');
@@ -182,7 +182,7 @@ class BannerController extends Controller
     public function publicBanners()
     {
         try {
-            $banners = Banner::where('status', 'Active')
+            $banners = Banner::where('status', 1)
                 ->orderBy('order', 'ASC')
                 ->orderBy('id', 'DESC')
                 ->get();

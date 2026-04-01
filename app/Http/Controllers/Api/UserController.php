@@ -15,6 +15,23 @@ class UserController extends Controller
     use ApiResponse;
 
     /**
+     * Display a listing of active members only (Public API).
+     */
+    public function activeMembers(Request $request)
+    {
+        try {
+            $users = User::where('role', 'Member')->where('status', '1')
+                ->orderBy('id', 'DESC')
+                ->get();
+
+            return $this->successResponse($users, 'Active members retrieved successfully');
+        }
+        catch (Exception $e) {
+            return $this->errorResponse($e->getMessage(), 500);
+        }
+    }
+
+    /**
      * Display a listing of members only.
      */
     public function index(Request $request)
@@ -116,7 +133,7 @@ class UserController extends Controller
         $user->phone = $request->phone;
         $user->password = Hash::make(Str::random(16)); // Randomized unusable password
         $user->role = 'Member';
-        $user->status = 'Active';
+        $user->status = 1;
         $user->save();
 
         return $this->successResponse($user, 'Member created successfully', 201);
@@ -147,7 +164,7 @@ class UserController extends Controller
     //     'name' => 'sometimes|required|string|max:255',
     //     'email' => 'sometimes|required|email|unique:users,email,' . $user->id,
     //     'phone' => 'sometimes|required|unique:users,phone,' . $user->id . '|regex:/^[0-9]{10}$/',
-    //     'status' => 'sometimes|required|in:Active,Inactive',
+    //     'status' => 'sometimes|required|in:0,1',
     // ]);
 
     // $user->update($request->all());
@@ -173,7 +190,7 @@ class UserController extends Controller
     {
         try {
             $user = User::findOrFail($id);
-            $user->status = ($user->status === 'Active') ? 'Inactive' : 'Active';
+            $user->status = ($user->status == 1) ? 0 : 1;
             $user->save();
 
             return $this->successResponse($user, 'Member status updated successfully');
