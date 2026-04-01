@@ -28,22 +28,50 @@ class BookingController extends Controller
             $limit = $request->input('limit', null);
             $page = $request->input('page', 1);
             $search = $request->input('search', null);
+            $assetId = $request->input('asset_id');
+            $fromDate = $request->input('startDate');
+            $toDate = $request->input('endDate');
+
+            $request->validate([
+                'asset_id' => 'nullable|exists:assets,id',
+                'from_date' => 'nullable|date',
+                'to_date' => 'nullable|date|after_or_equal:from_date',
+            ]);
 
             $query = Booking::with(['user', 'asset']);
 
             if ($search) {
-                $query->where('id', 'like', '%' . $search . '%')
-                      ->orWhere('user_phone', 'like', '%' . $search . '%')
-                      ->orWhere('user_name', 'like', '%' . $search . '%');
+                $query->where(function ($query) use ($search) {
+                    $query->where('id', 'like', '%' . $search . '%')
+                        ->orWhere('user_phone', 'like', '%' . $search . '%')
+                        ->orWhere('user_name', 'like', '%' . $search . '%')
+                        ->orWhereHas('asset', function ($assetQuery) use ($search) {
+                            $assetQuery->where('name', 'like', '%' . $search . '%');
+                        });
+                });
+            }
+
+            if ($assetId) {
+                $query->where('asset_id', $assetId);
+            }
+
+            if ($fromDate) {
+                $query->whereDate('start_date', '>=', $fromDate);
+            }
+
+            if ($toDate) {
+                $query->whereDate('end_date', '<=', $toDate);
             }
 
            if($limit){
              $bookings = $query->orderBy('id', 'DESC')
                     ->paginate($limit, ['*'], 'page', $page);
-
             $bookings->getCollection()->transform(function ($booking) {
                     return [
                     'id' => $booking->id,
+                    'asset_id' => $booking->asset_id,
+                    'assets_name' => $booking->asset?->name,
+                    'price' => $booking->asset?->price,
                     'user_name' => $booking->user_name,
                     'user_phone' => $booking->user_phone,
                     'user_email' => $booking->user_email,
@@ -72,6 +100,9 @@ class BookingController extends Controller
                 $bookings->transform(function ($booking) {
                     return [
                     'id' => $booking->id,
+                    'asset_id' => $booking->asset_id,
+                    'assets_name' => $booking->asset?->name,
+                    'price' => $booking->asset?->price,
                     'user_name' => $booking->user_name,
                     'user_phone' => $booking->user_phone,
                     'user_email' => $booking->user_email,
@@ -114,8 +145,14 @@ class BookingController extends Controller
     public function store(Request $request)
     {
         $request->validate([
+            'asset_id' => 'required|exists:assets,id',
+        ]);
+
+        $asset = Asset::findOrFail($request->asset_id);
+
+        $request->validate([
             'asset_id'       => 'required|exists:assets,id',
-            'payment_image'  => 'required|image|mimes:jpeg,png,jpg,gif,svg,webp|max:2048',
+            'payment_image'  => ($asset->price > 0 ? 'required' : 'nullable') . '|image|mimes:jpeg,png,jpg,gif,svg,webp|max:2048',
             'user_name'      => 'required|string|max:255',
             'user_phone'     => 'required|regex:/^[0-9]{10}$/',
             'user_email'     => 'required|email',
@@ -124,10 +161,11 @@ class BookingController extends Controller
             'id_number'      => 'required|string',
             'id_image_path'  => 'required|image|mimes:jpeg,png,jpg,gif,svg,webp|max:2048',
             'reference'      => 'nullable|string',
+        ], [
+            'payment_image.required' => 'Payment image is required when the selected asset price is greater than 0.',
         ]);
 
         // Availability Check — detect overlapping approved bookings within the requested datetime range
-        $asset = Asset::findOrFail($request->asset_id);
         $overlappingCount = Booking::where('asset_id', $request->asset_id)
             ->where('status', 'Approved')
             ->where('start_date', '<', $request->end_date)
