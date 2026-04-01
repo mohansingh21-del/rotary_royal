@@ -3,16 +3,16 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\Booking;
 use App\Models\Asset;
-use App\Traits\ApiResponse;
+use App\Models\Booking;
 use App\Models\User;
 use App\Notifications\BookingConfirmedNotification;
 use App\Notifications\BookingRejectedNotification;
 use App\Notifications\NewBookingAdminNotification;
+use App\Traits\ApiResponse;
+use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
-use Exception;
 
 class BookingController extends Controller
 {
@@ -52,6 +52,7 @@ class BookingController extends Controller
                     'id_type' => $booking->id_type,
                     'id_number' => $booking->id_number,
                     'id_image_path' => $booking->id_image_path,
+                    'payment_image' => $booking->payment_image,
                     'status' => $booking->status
                     ];
                 });
@@ -80,6 +81,7 @@ class BookingController extends Controller
                     'id_type' => $booking->id_type,
                     'id_number' => $booking->id_number,
                     'id_image_path' => $booking->id_image_path,
+                    'payment_image' => $booking->payment_image,
                     'status' => $booking->status,
                     ];
                 });
