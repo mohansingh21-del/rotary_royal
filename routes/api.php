@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('v1')->group(function () {
 
     Route::post('auth/login', [AuthController::class , 'login']);
+    Route::post('auth/logout', [AuthController::class , 'logout']);
     Route::post('auth/forgot-password', [AuthController::class , 'forgotPassword']);
     Route::post('auth/reset-password', [AuthController::class , 'resetPassword']);
     Route::post('donations', [DonationController::class , 'store']); // Public Donation Creator
@@ -30,9 +31,6 @@ Route::prefix('v1')->group(function () {
 
     // Protected Admin Routes
     Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
-
-            // Auth
-            Route::post('auth/logout', [AuthController::class , 'logout']);
 
             // Assets
             Route::get('assets', [AssetController::class , 'index']);
