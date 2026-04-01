@@ -33,7 +33,6 @@ class Booking extends Model
         'start_date',
         'end_date',
         'reference',
-        'id_type',
         'id_number',
         'id_image_path',
         'payment_image',

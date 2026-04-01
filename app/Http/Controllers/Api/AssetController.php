@@ -125,7 +125,7 @@ class AssetController extends Controller
                     }),
             ],
             'category' => 'required|in:Asset,Consumable',
-            'quantity' => 'required|integer|min:0',
+            'quantity' => 'required|integer|min:1',
             'buffer_time' => 'required|integer|min:0',
             'price' => 'required|numeric|min:0',
             'image' => ($id ? 'nullable' : 'required') . '|image|mimes:jpeg,png,jpg,gif,svg,webp|max:2048|dimensions:width=48,height=48',
@@ -135,6 +135,7 @@ class AssetController extends Controller
             $id ? array_merge(['id' => 'required|exists:assets,id'], $rules) : $rules,
             [
                 'name.unique' => 'An asset with this name and category already exists.',
+                'quantity.min' => 'Quantity must be greater than 0.',
             ]
         );
 

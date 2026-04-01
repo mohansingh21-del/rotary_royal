@@ -49,7 +49,6 @@ class BookingController extends Controller
                     'user_email' => $booking->user_email,
                     'start_date' => $booking->start_date,
                     'end_date' => $booking->end_date,
-                    'id_type' => $booking->id_type,
                     'id_number' => $booking->id_number,
                     'id_image_path' => $booking->id_image_path,
                     'payment_image' => $booking->payment_image,
@@ -78,7 +77,6 @@ class BookingController extends Controller
                     'user_email' => $booking->user_email,
                     'start_date' => $booking->start_date,
                     'end_date' => $booking->end_date,
-                    'id_type' => $booking->id_type,
                     'id_number' => $booking->id_number,
                     'id_image_path' => $booking->id_image_path,
                     'payment_image' => $booking->payment_image,
@@ -116,27 +114,28 @@ class BookingController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'asset_id' => 'required|exists:assets,id',
-            'payment_image' => 'required|image|mimes:jpeg,png,jpg,gif,svg,webp|max:2048',
-            'user_name' => 'required|string|max:255',
-            'user_phone' => 'required|regex:/^[0-9]{10}$/',
-            'user_email' => 'required|email',
-            'start_date' => 'required|date|after_or_equal:today',
-            'end_date' => 'required|date|after_or_equal:start_date',
-            'id_type' => 'required|string',
-            'id_number' => 'required|string',
-            'id_image_path' => 'required|image|mimes:jpeg,png,jpg,gif,svg,webp|max:2048',
-            'reference' => 'nullable|string',
+            'asset_id'       => 'required|exists:assets,id',
+            'payment_image'  => 'required|image|mimes:jpeg,png,jpg,gif,svg,webp|max:2048',
+            'user_name'      => 'required|string|max:255',
+            'user_phone'     => 'required|regex:/^[0-9]{10}$/',
+            'user_email'     => 'required|email',
+            'start_date'     => 'required|date|after_or_equal:now',
+            'end_date'       => 'required|date|after:start_date',
+            'id_number'      => 'required|string',
+            'id_image_path'  => 'required|image|mimes:jpeg,png,jpg,gif,svg,webp|max:2048',
+            'reference'      => 'nullable|string',
         ]);
 
-        // Availability Check
+        // Availability Check — detect overlapping approved bookings within the requested datetime range
         $asset = Asset::findOrFail($request->asset_id);
-        $bookedCount = Booking::where('asset_id', $request->asset_id)
+        $overlappingCount = Booking::where('asset_id', $request->asset_id)
             ->where('status', 'Approved')
+            ->where('start_date', '<', $request->end_date)
+            ->where('end_date', '>', $request->start_date)
             ->count();
 
-        if ($bookedCount >= $asset->quantity) {
-            return $this->errorResponse('Not Available: All units of this asset are currently booked.', 422);
+        if ($overlappingCount >= $asset->quantity) {
+            return $this->errorResponse('Not Available: This asset is fully booked for the selected time slot.', 422);
         }
 
         // Handle Payment Image Upload

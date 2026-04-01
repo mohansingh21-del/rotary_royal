@@ -83,7 +83,6 @@ class DatabaseSeeder extends Seeder
             'user_email' => 'rahul@example.com',
             'start_date' => now()->addDays(2),
             'end_date' => now()->addDays(5),
-            'id_type' => 'Aadhar Card',
             'id_number' => '1234-5678-9012',
             'id_image_path' => 'aadhar_front.jpg',
             'status' => 'Approved',
