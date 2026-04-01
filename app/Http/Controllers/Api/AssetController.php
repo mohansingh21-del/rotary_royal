@@ -7,6 +7,7 @@ use App\Models\Asset;
 use App\Traits\ApiResponse;
 use App\Models\Booking;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Exception;
 
 class AssetController extends Controller
@@ -106,8 +107,23 @@ class AssetController extends Controller
     {
         $id = $request->input('id');
 
+        $request->merge([
+            'name' => trim((string) $request->input('name', '')),
+        ]);
+
         $rules = [
-            'name' => 'required|string|max:255',
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                Rule::unique('assets')
+                    ->ignore($id)
+                    ->where(function ($query) use ($request) {
+                        return $query
+                            ->where('category', $request->input('category'))
+                            ->whereNull('deleted_at');
+                    }),
+            ],
             'category' => 'required|in:Asset,Consumable',
             'quantity' => 'required|integer|min:0',
             'buffer_time' => 'required|integer|min:0',
@@ -115,7 +131,12 @@ class AssetController extends Controller
             'image' => ($id ? 'nullable' : 'required') . '|image|mimes:jpeg,png,jpg,gif,svg,webp|max:2048|dimensions:width=48,height=48',
         ];
 
-        $validated = $request->validate($id ? array_merge(['id' => 'required|exists:assets,id'], $rules) : $rules);
+        $validated = $request->validate(
+            $id ? array_merge(['id' => 'required|exists:assets,id'], $rules) : $rules,
+            [
+                'name.unique' => 'An asset with this name and category already exists.',
+            ]
+        );
 
         $asset = $request->id ?Asset::findOrFail($request->id) : new Asset();
 
