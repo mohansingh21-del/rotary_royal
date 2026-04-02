@@ -59,4 +59,9 @@ class Booking extends Model
     {
         return $this->belongsTo(Asset::class);
     }
+
+    public function referrer()
+    {
+        return $this->belongsTo(User::class, 'reference');
+    }
 }

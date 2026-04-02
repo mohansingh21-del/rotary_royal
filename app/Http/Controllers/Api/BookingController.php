@@ -38,7 +38,7 @@ class BookingController extends Controller
                 'to_date' => 'nullable|date|after_or_equal:from_date',
             ]);
 
-            $query = Booking::with(['user', 'asset']);
+            $query = Booking::with(['user', 'asset', 'referrer']);
 
             if ($search) {
                 $query->where(function ($query) use ($search) {
@@ -80,7 +80,7 @@ class BookingController extends Controller
                     'id_number' => $booking->id_number,
                     'id_image_path' => $booking->id_image_path,
                     'payment_image' => $booking->payment_image,
-                    'reference' => $booking->reference,
+                    'reference' => $booking->referrer?->name ?? $booking->reference,
                     'status' => $booking->status
                     ];
                 });
@@ -112,7 +112,7 @@ class BookingController extends Controller
                     'id_number' => $booking->id_number,
                     'id_image_path' => $booking->id_image_path,
                     'payment_image' => $booking->payment_image,
-                    'reference' => $booking->reference,
+                    'reference' => $booking->referrer?->name ?? $booking->reference,
                     'status' => $booking->status,
                     ];
                 });
