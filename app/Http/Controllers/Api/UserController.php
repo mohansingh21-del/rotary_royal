@@ -73,6 +73,8 @@ class UserController extends Controller
                         'last_page' => $users->lastPage(),
                         'from' => $users->firstItem(),
                         'to' => $users->lastItem(),
+                        'next_page_url' => $users->nextPageUrl(),
+                        'previous_page_url' => $users->previousPageUrl(),
                     ]
                 ];
             }
@@ -96,6 +98,8 @@ class UserController extends Controller
                         'last_page' => 1,
                         'from' => $users->isEmpty() ? 0 : 1,
                         'to' => $users->count(),
+                        'next_page_url' => null,
+                        'previous_page_url' => null,
                     ]
                 ];
 

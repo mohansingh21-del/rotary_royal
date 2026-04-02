@@ -53,6 +53,8 @@ class DonationController extends Controller
                         'last_page' => $donations->lastPage(),
                         'from' => $donations->firstItem(),
                         'to' => $donations->lastItem(),
+                        'next_page_url' => $donations->nextPageUrl(),
+                        'previous_page_url' => $donations->previousPageUrl(),
                     ]
                 ];
             }
@@ -78,6 +80,8 @@ class DonationController extends Controller
                         'last_page' => 1,
                         'from' => $donations->isEmpty() ? 0 : 1,
                         'to' => $donations->count(),
+                        'next_page_url' => null,
+                        'previous_page_url' => null,
                     ]
                 ];
             }

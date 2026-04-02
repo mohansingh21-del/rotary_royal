@@ -14,6 +14,7 @@ class Asset extends Model
         'name',
         'category',
         'quantity',
+        'left_quantity',
         'buffer_time',
         'price',
         'image',
@@ -25,25 +26,4 @@ class Asset extends Model
         return $this->hasMany(\App\Models\Booking::class , 'asset_id');
     }
 
-    /**
-     * Update asset status based on current availability.
-     * 1 for available, 0 for unavailable.
-     */
-    public static function updateStatusById($id)
-    {
-        $asset = self::find($id);
-        if (!$asset) {
-            return;
-        }
-
-        $bookedCount = \App\Models\Booking::where('asset_id', $id)
-            ->where('status', 'Approved')
-            ->count();
-
-        $newStatus = ($bookedCount < $asset->quantity) ? 1 : 0;
-
-        if ($asset->status != $newStatus) {
-            $asset->update(['status' => $newStatus]);
-        }
-    }
 }

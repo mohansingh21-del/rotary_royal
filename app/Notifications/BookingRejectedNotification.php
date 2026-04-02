@@ -51,7 +51,7 @@ class BookingRejectedNotification extends Notification
             ->line('Your booking for ' . $this->booking->asset->name . ' has been rejected.')
             ->line('Reason for rejection: ' . $this->reason)
             ->line('If you have any questions, please contact our support team.')
-            ->action('View My Bookings', url('/bookings'))
+            // ->action('View My Bookings', url('/bookings'))
             ->line('Thank you for using Rotary Royals Emergency Bank.');
     }
 }

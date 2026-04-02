@@ -53,6 +53,8 @@ class BannerController extends Controller
                         'last_page' => $banners->lastPage(),
                         'from' => $banners->firstItem(),
                         'to' => $banners->lastItem(),
+                        'next_page_url' => $banners->nextPageUrl(),
+                        'previous_page_url' => $banners->previousPageUrl(),
                     ]
                 ];
             }
@@ -81,6 +83,8 @@ class BannerController extends Controller
                         'last_page' => 1,
                         'from' => $banners->isEmpty() ? 0 : 1,
                         'to' => $banners->count(),
+                        'next_page_url' => null,
+                        'previous_page_url' => null,
                     ]
                 ];
             }

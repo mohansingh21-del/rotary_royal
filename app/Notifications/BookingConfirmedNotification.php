@@ -43,12 +43,11 @@ class BookingConfirmedNotification extends Notification
     public function toMail($notifiable)
     {
         return (new MailMessage)
-                    ->subject('Booking Confirmed - ' . $this->booking->id)
-                    ->line('Your booking for ' . $this->booking->asset->name . ' has been confirmed.')
-                    ->line('Start Date: ' . $this->booking->start_date->format('d-m-Y'))
-                    ->line('End Date: ' . $this->booking->end_date->format('d-m-Y'))
-                    ->action('View My Bookings', url('/bookings'))
-                    ->line('Thank you for choosing Rotary Royals Emergency Bank.');
+            ->subject('Booking Confirmed - ' . $this->booking->id)
+            ->line('Your booking for ' . $this->booking->asset->name . ' has been confirmed.')
+            ->line('Start Date: ' . $this->booking->start_date->format('d-m-Y H:i'))
+            ->line('End Date: ' . $this->booking->end_date->format('d-m-Y H:i'))
+            ->line('Thank you for choosing Rotary Royals Emergency Bank.');
     }
 
     /**

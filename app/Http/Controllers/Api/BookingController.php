@@ -94,6 +94,8 @@ class BookingController extends Controller
                         'last_page' => $bookings->lastPage(),
                         'from' => $bookings->firstItem(),
                         'to' => $bookings->lastItem(),
+                        'next_page_url' => $bookings->nextPageUrl(),
+                        'previous_page_url' => $bookings->previousPageUrl(),
                     ]
                 ];
             }else{
@@ -125,6 +127,8 @@ class BookingController extends Controller
                         'last_page' => 1,
                         'from' => $bookings->isEmpty() ? 0 : 1,
                         'to' => $bookings->count(),
+                        'next_page_url' => null,
+                        'previous_page_url' => null,
                     ]
                 ];
             }
@@ -222,6 +226,13 @@ class BookingController extends Controller
         // Notify User (including guests)
         Notification::route('mail', $booking->user_email)->notify(new BookingConfirmedNotification($booking));
 
+        // Keep left_quantity in sync
+        $asset->decrement('left_quantity');
+        if ($asset->left_quantity < 0) {
+            $asset->left_quantity = 0;
+            $asset->saveQuietly();
+        }
+
         return $this->successResponse($booking, 'Booking confirmed successfully', 201);
     }
 
@@ -242,8 +253,12 @@ class BookingController extends Controller
             'rejection_reason' => $request->reason,
         ]);
 
-        // Update asset status
-        Asset::updateStatusById($booking->asset_id);
+        // Restore left_quantity for this asset
+        $rejectedAsset = Asset::find($booking->asset_id);
+        if ($rejectedAsset) {
+            $rejectedAsset->left_quantity = min($rejectedAsset->quantity, $rejectedAsset->left_quantity + 1);
+            $rejectedAsset->saveQuietly();
+        }
 
         // Notify User (including guests)
         Notification::route('mail', $booking->user_email)->notify(new BookingRejectedNotification($booking, $request->reason));

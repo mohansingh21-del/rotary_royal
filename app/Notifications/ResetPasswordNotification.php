@@ -43,11 +43,11 @@ class ResetPasswordNotification extends Notification
     public function toMail($notifiable)
     {
         return (new MailMessage)
-                    ->subject('Password Reset OTP')
-                    ->line('You are receiving this email because we received a password reset request for your account.')
-                    ->line('Your 4-digit OTP is: **' . $this->otp . '**')
-                    ->line('This OTP will expire in 15 minutes.')
-                    ->line('If you did not request a password reset, no further action is required.');
+            ->subject('Password Reset OTP')
+            ->line('You are receiving this email because we received a password reset request for your account.')
+            ->line('Your 4-digit OTP is: **' . $this->otp . '**')
+            ->line('This OTP will expire in 15 minutes.')
+            ->line('If you did not request a password reset, no further action is required.');
     }
 
     /**

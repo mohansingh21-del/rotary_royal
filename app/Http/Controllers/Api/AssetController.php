@@ -45,11 +45,11 @@ class AssetController extends Controller
                     'name' => $asset->name,
                     'category' => $asset->category,
                     'quantity' => $asset->quantity,
-                    'left_quantity' => max(0, $asset->quantity - $asset->approved_bookings_count),
+                    'left_quantity' => $asset->left_quantity,
                     'buffer_time' => $asset->buffer_time,
                     'price' => $asset->price,
                     'image' => $asset->image,
-                    'status' => $asset->status
+                    'status' => ($asset->left_quantity === 0) ? 0 : $asset->status
                     ];
                 });
 
@@ -62,6 +62,8 @@ class AssetController extends Controller
                         'last_page' => $assets->lastPage(),
                         'from' => $assets->firstItem(),
                         'to' => $assets->lastItem(),
+                        'next_page_url' => $assets->nextPageUrl(),
+                        'previous_page_url' => $assets->previousPageUrl(),
                     ]
                 ];
             }
@@ -73,11 +75,11 @@ class AssetController extends Controller
                     'name' => $asset->name,
                     'category' => $asset->category,
                     'quantity' => $asset->quantity,
-                    'left_quantity' => max(0, $asset->quantity - $asset->approved_bookings_count),
+                    'left_quantity' => $asset->left_quantity,
                     'buffer_time' => $asset->buffer_time,
                     'price' => $asset->price,
                     'image' => $asset->image,
-                    'status' => $asset->status
+                    'status' => ($asset->left_quantity === 0) ? 0 : $asset->status
                     ];
                 });
                 $response = [
@@ -89,6 +91,8 @@ class AssetController extends Controller
                         'last_page' => 1,
                         'from' => $assets->isEmpty() ? 0 : 1,
                         'to' => $assets->count(),
+                        'next_page_url' => null,
+                        'previous_page_url' => null,
                     ]
                 ];
             }
@@ -162,6 +166,18 @@ class AssetController extends Controller
         $asset->quantity = $validated['quantity'];
         $asset->buffer_time = $validated['buffer_time'];
         $asset->price = $validated['price'];
+
+        // Recalculate left_quantity based on approved bookings
+        $approvedCount = $asset->id
+            ?Booking::where('asset_id', $asset->id)->where('status', 'Approved')->count()
+            : 0;
+        $asset->left_quantity = max(0, $validated['quantity'] - $approvedCount);
+
+        // Auto-enable asset if stock is now available
+        if ($asset->left_quantity > 0) {
+            $asset->status = 1;
+        }
+
         $asset->save();
 
         return response()->json([
@@ -180,7 +196,13 @@ class AssetController extends Controller
 
         try {
             $asset = Asset::findOrFail($id);
-            $asset->status = !$asset->status;
+
+            // Block enabling if no stock is left
+            if (!$asset->status && $asset->left_quantity === 0) {
+                return $this->errorResponse('Cannot mark as available: no stock left (left_quantity is 0)', 422);
+            }
+
+            $asset->status = (int)(!$asset->status);
             $asset->save();
 
             return $this->successResponse($asset, 'Asset status updated successfully');
@@ -218,7 +240,7 @@ class AssetController extends Controller
     {
         $now = now();
 
-        // 1. Auto-complete bookings where end_date + buffer_time has passed
+        //Auto-complete bookings where end_date + buffer_time has passed
         $bookings = Booking::where('status', 'Approved')->with('asset')->get();
         foreach ($bookings as $booking) {
             $bufferHours = $booking->asset->buffer_time ?? 0;
@@ -228,19 +250,16 @@ class AssetController extends Controller
             }
         }
 
-        // 2. Update asset statuses based on approved bookings vs quantity
+        // Recalculate left_quantity for every asset
         $assets = Asset::all();
         foreach ($assets as $asset) {
-            $bookedCount = Booking::where('asset_id', $asset->id)
+            $approved = Booking::where('asset_id', $asset->id)
                 ->where('status', 'Approved')
                 ->count();
-
-            // 1 for available, 0 for unavailable
-            $newStatus = ($bookedCount < $asset->quantity) ? 1 : 0;
-
-            if ($asset->status != $newStatus) {
-                $asset->update(['status' => $newStatus]);
-            }
+            $asset->left_quantity = max(0, $asset->quantity - $approved);
+            $asset->saveQuietly();
         }
+
+
     }
 }
