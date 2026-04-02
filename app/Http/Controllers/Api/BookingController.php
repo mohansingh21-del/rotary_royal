@@ -80,6 +80,7 @@ class BookingController extends Controller
                     'id_number' => $booking->id_number,
                     'id_image_path' => $booking->id_image_path,
                     'payment_image' => $booking->payment_image,
+                    'reference' => $booking->reference,
                     'status' => $booking->status
                     ];
                 });
@@ -111,6 +112,7 @@ class BookingController extends Controller
                     'id_number' => $booking->id_number,
                     'id_image_path' => $booking->id_image_path,
                     'payment_image' => $booking->payment_image,
+                    'reference' => $booking->reference,
                     'status' => $booking->status,
                     ];
                 });

@@ -20,6 +20,11 @@ class Asset extends Model
         'status',
     ];
 
+    public function bookings()
+    {
+        return $this->hasMany(\App\Models\Booking::class , 'asset_id');
+    }
+
     /**
      * Update asset status based on current availability.
      * 1 for available, 0 for unavailable.

@@ -26,7 +26,9 @@ class AssetController extends Controller
             $page = $request->input('page', 1);
             $search = $request->input('search', null);
 
-            $query = Asset::query();
+            $query = Asset::withCount(['bookings as approved_bookings_count' => function ($q) {
+                $q->where('status', 'Approved');
+            }]);
 
             if ($search) {
                 $query->where('name', 'like', '%' . $search . '%')
@@ -43,6 +45,7 @@ class AssetController extends Controller
                     'name' => $asset->name,
                     'category' => $asset->category,
                     'quantity' => $asset->quantity,
+                    'left_quantity' => max(0, $asset->quantity - $asset->approved_bookings_count),
                     'buffer_time' => $asset->buffer_time,
                     'price' => $asset->price,
                     'image' => $asset->image,
@@ -70,6 +73,7 @@ class AssetController extends Controller
                     'name' => $asset->name,
                     'category' => $asset->category,
                     'quantity' => $asset->quantity,
+                    'left_quantity' => max(0, $asset->quantity - $asset->approved_bookings_count),
                     'buffer_time' => $asset->buffer_time,
                     'price' => $asset->price,
                     'image' => $asset->image,
@@ -108,7 +112,7 @@ class AssetController extends Controller
         $id = $request->input('id');
 
         $request->merge([
-            'name' => trim((string) $request->input('name', '')),
+            'name' => trim((string)$request->input('name', '')),
         ]);
 
         $rules = [
@@ -117,26 +121,26 @@ class AssetController extends Controller
                 'string',
                 'max:255',
                 Rule::unique('assets')
-                    ->ignore($id)
-                    ->where(function ($query) use ($request) {
-                        return $query
-                            ->where('category', $request->input('category'))
-                            ->whereNull('deleted_at');
-                    }),
+                ->ignore($id)
+                ->where(function ($query) use ($request) {
+            return $query
+            ->where('category', $request->input('category'))
+            ->whereNull('deleted_at');
+        }),
             ],
             'category' => 'required|in:Asset,Consumable',
             'quantity' => 'required|integer|min:1',
             'buffer_time' => 'required|integer|min:0',
             'price' => 'required|numeric|min:0',
-            'image' => ($id ? 'nullable' : 'required') . '|image|mimes:jpeg,png,jpg,gif,svg,webp|max:2048|dimensions:width=48,height=48',
+            'image' => ($id ? 'nullable' : 'required') . '|image|mimes:jpeg,png,jpg,gif,svg,webp|max:2048|dimensions:width=64,height=64',
         ];
 
         $validated = $request->validate(
             $id ? array_merge(['id' => 'required|exists:assets,id'], $rules) : $rules,
-            [
-                'name.unique' => 'An asset with this name and category already exists.',
-                'quantity.min' => 'Quantity must be greater than 0.',
-            ]
+        [
+            'name.unique' => 'An asset with this name and category already exists.',
+            'quantity.min' => 'Quantity must be greater than 0.',
+        ]
         );
 
         $asset = $request->id ?Asset::findOrFail($request->id) : new Asset();
@@ -193,6 +197,12 @@ class AssetController extends Controller
     {
         try {
             $asset = Asset::findOrFail($id);
+
+            $is_mapped = Booking::where('asset_id', $id)->exists();
+
+            if ($is_mapped) {
+                return $this->errorResponse('Cannot be deleted, Asset is mapped to a booking', 422);
+            }
             $asset->delete();
 
             return $this->successResponse(null, 'Asset deleted successfully');
