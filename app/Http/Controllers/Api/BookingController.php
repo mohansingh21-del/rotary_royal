@@ -64,7 +64,7 @@ class BookingController extends Controller
             }
 
            if($limit){
-             $bookings = $query->orderBy('id', 'DESC')
+             $bookings = $query->orderBy('created_at', 'DESC')
                     ->paginate($limit, ['*'], 'page', $page);
             $bookings->getCollection()->transform(function ($booking) {
                     return [
@@ -99,7 +99,7 @@ class BookingController extends Controller
                     ]
                 ];
             }else{
-                $bookings = $query->orderBy('id', 'DESC')->get();
+                $bookings = $query->orderBy('created_at', 'DESC')->get();
                 $bookings->transform(function ($booking) {
                     return [
                     'id' => $booking->id,
@@ -158,14 +158,14 @@ class BookingController extends Controller
 
         $request->validate([
             'asset_id'       => 'required|exists:assets,id',
-            'payment_image'  => ($asset->price > 0 ? 'required' : 'nullable') . '|image|mimes:jpeg,png,jpg,gif,svg,webp|max:2048',
+            'payment_image'  => ($asset->price > 0 ? 'required' : 'nullable') . '|image|mimes:jpeg,png,jpg,gif,svg,webp|max:5120',
             'user_name'      => 'required|string|max:255',
             'user_phone'     => 'required|regex:/^[0-9]{10}$/',
             'user_email'     => 'required|email',
             'start_date'     => 'required|date|after_or_equal:now',
             'end_date'       => 'required|date|after:start_date',
             'id_number'      => 'required|string',
-            'id_image_path'  => 'required|image|mimes:jpeg,png,jpg,gif,svg,webp|max:2048',
+            'id_image_path'  => 'required|image|mimes:jpeg,png,jpg,gif,svg,webp|max:5120',
             'reference'      => 'nullable|string',
         ], [
             'payment_image.required' => 'Payment image is required when the selected asset price is greater than 0.',

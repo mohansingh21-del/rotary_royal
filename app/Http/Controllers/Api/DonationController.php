@@ -31,7 +31,7 @@ class DonationController extends Controller
             }
 
             if ($limit) {
-                $donations = $query->orderBy('id', 'DESC')
+                $donations = $query->orderBy('created_at', 'DESC')
                     ->paginate($limit, ['*'], 'page', $page);
 
                 $donations->getCollection()->transform(function ($donation) {
@@ -59,7 +59,7 @@ class DonationController extends Controller
                 ];
             }
             else {
-                $donations = $query->orderBy('id', 'DESC')->get();
+                $donations = $query->orderBy('created_at', 'DESC')->get();
 
                 $donations->transform(function ($donation) {
                     return [

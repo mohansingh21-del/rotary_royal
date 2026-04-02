@@ -51,7 +51,7 @@ class UserController extends Controller
             }
 
             if ($limit) {
-                $users = $query->orderBy('id', 'DESC')
+                $users = $query->orderBy('created_at', 'DESC')
                     ->paginate($limit, ['*'], 'page', $page);
 
                 $users->getCollection()->transform(function ($user) {
@@ -79,7 +79,7 @@ class UserController extends Controller
                 ];
             }
             else {
-                $users = $query->orderBy('id', 'DESC')->get();
+                $users = $query->orderBy('created_at', 'DESC')->get();
                 $users->transform(function ($user) {
                     return [
                     'id' => $user->id,

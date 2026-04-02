@@ -30,7 +30,7 @@ class BannerController extends Controller
 
             if ($limit) {
                 $banners = $query->orderBy('order', 'ASC')
-                    ->orderBy('id', 'DESC')
+                    ->orderBy('created_at', 'DESC')
                     ->paginate($limit, ['*'], 'page', $page);
 
                 $banners->getCollection()->transform(function ($banner) {
@@ -60,7 +60,7 @@ class BannerController extends Controller
             }
             else {
                 $banners = $query->orderBy('order', 'ASC')
-                    ->orderBy('id', 'DESC')
+                    ->orderBy('created_at', 'DESC')
                     ->get();
 
                 $banners->transform(function ($banner) {
@@ -188,7 +188,7 @@ class BannerController extends Controller
         try {
             $banners = Banner::where('status', 1)
                 ->orderBy('order', 'ASC')
-                ->orderBy('id', 'DESC')
+                ->orderBy('created_at', 'DESC')
                 ->get();
 
             return $this->successResponse($banners, 'Active banners retrieved successfully');

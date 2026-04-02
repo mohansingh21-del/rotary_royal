@@ -15,7 +15,10 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule)
     {
-        $schedule->command('bookings:auto-complete')->daily();
+        // Run booking expiration + asset left_quantity recalculation every 5 minutes
+        $schedule->call(function () {
+            app()->make(\App\Services\BookingService::class)->refreshAssetAvailability();
+        })->everyMinute()->name('booking-refresh')->withoutOverlapping();
     }
 
     /**

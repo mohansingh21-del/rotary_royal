@@ -19,8 +19,6 @@ class AssetController extends Controller
      */
     public function index(Request $request)
     {
-        $this->refreshAssetAvailability();
-
         try {
             $limit = $request->input('limit', null);
             $page = $request->input('page', 1);
@@ -36,7 +34,7 @@ class AssetController extends Controller
             }
 
             if ($limit) {
-                $assets = $query->orderBy('id', 'DESC')
+                $assets = $query->orderBy('created_at', 'DESC')
                     ->paginate($limit, ['*'], 'page', $page);
 
                 $assets->getCollection()->transform(function ($asset) {
@@ -68,7 +66,7 @@ class AssetController extends Controller
                 ];
             }
             else {
-                $assets = $query->orderBy('id', 'DESC')->get();
+                $assets = $query->orderBy('created_at', 'DESC')->get();
                 $assets->transform(function ($asset) {
                     return [
                     'id' => $asset->id,
@@ -136,7 +134,7 @@ class AssetController extends Controller
             'quantity' => 'required|integer|min:1',
             'buffer_time' => 'required|integer|min:0',
             'price' => 'required|numeric|min:0',
-            'image' => ($id ? 'nullable' : 'required') . '|image|mimes:jpeg,png,jpg,gif,svg,webp|max:2048|dimensions:width=64,height=64',
+            'image' => ($id ? 'nullable' : 'required') . '|image|mimes:jpeg,png,jpg,gif,svg,webp|max:5120|dimensions:width=64,height=64',
         ];
 
         $validated = $request->validate(
@@ -232,34 +230,5 @@ class AssetController extends Controller
         catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
-    }
-    /**
-     * Refresh asset availability based on current bookings.
-     */
-    protected function refreshAssetAvailability()
-    {
-        $now = now();
-
-        //Auto-complete bookings where end_date + buffer_time has passed
-        $bookings = Booking::where('status', 'Approved')->with('asset')->get();
-        foreach ($bookings as $booking) {
-            $bufferHours = $booking->asset->buffer_time ?? 0;
-            $completionDate = $booking->end_date->addHours($bufferHours);
-            if ($now->greaterThan($completionDate)) {
-                $booking->update(['status' => 'Completed']);
-            }
-        }
-
-        // Recalculate left_quantity for every asset
-        $assets = Asset::all();
-        foreach ($assets as $asset) {
-            $approved = Booking::where('asset_id', $asset->id)
-                ->where('status', 'Approved')
-                ->count();
-            $asset->left_quantity = max(0, $asset->quantity - $approved);
-            $asset->saveQuietly();
-        }
-
-
     }
 }
