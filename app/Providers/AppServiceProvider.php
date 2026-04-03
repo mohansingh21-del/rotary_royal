@@ -23,6 +23,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot()
     {
-        //
+        \Illuminate\Support\Carbon::serializeUsing(function ($date) {
+            return $date->format('Y-m-d H:i:s');
+        });
     }
 }
