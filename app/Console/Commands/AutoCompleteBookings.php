@@ -39,7 +39,7 @@ class AutoCompleteBookings extends Command
         $completedCount = 0;
 
         foreach ($bookings as $booking) {
-            $bufferHours = $booking->asset->buffer_time ?? 0;
+            $bufferHours = $booking->buffer_time ?? 0;
             $completionDate = Carbon::parse($booking->end_date)->addHours($bufferHours);
 
             if ($now->greaterThan($completionDate)) {

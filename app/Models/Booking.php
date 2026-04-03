@@ -39,6 +39,7 @@ class Booking extends Model
         'id_image_path',
         'payment_image',
         'status',
+        'buffer_time',
         'rejection_reason',
     ];
 

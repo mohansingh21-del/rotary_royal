@@ -28,7 +28,7 @@ class BookingService
                         continue;
                     }
 
-                    $bufferHours    = $booking->asset->buffer_time ?? 0;
+                    $bufferHours    = $booking->buffer_time ?? 0;
                     $completionTime = $booking->end_date->copy()->addHours($bufferHours);
 
                     if ($now->greaterThan($completionTime)) {

@@ -81,7 +81,8 @@ class BookingController extends Controller
                     'id_image_path' => $booking->id_image_path,
                     'payment_image' => $booking->payment_image,
                     'reference' => $booking->referrer?->name ?? $booking->reference,
-                    'status' => $booking->status
+                    'status' => $booking->status,
+                    'buffer_time' => $booking->buffer_time,
                     ];
                 });
 
@@ -116,6 +117,7 @@ class BookingController extends Controller
                     'payment_image' => $booking->payment_image,
                     'reference' => $booking->referrer?->name ?? $booking->reference,
                     'status' => $booking->status,
+                    'buffer_time' => $booking->buffer_time,
                     ];
                 });
                 $response = [
@@ -171,11 +173,13 @@ class BookingController extends Controller
             'payment_image.required' => 'Payment image is required when the selected asset price is greater than 0.',
         ]);
 
-        // Availability Check — detect overlapping approved bookings within the requested datetime range
+        // Availability Check — detect overlapping approved bookings within the requested datetime range (including buffer time)
+        $newEndWithBuffer = \Illuminate\Support\Carbon::parse($request->end_date)->addHours($asset->buffer_time);
+
         $overlappingCount = Booking::where('asset_id', $request->asset_id)
             ->where('status', 'Approved')
-            ->where('start_date', '<', $request->end_date)
-            ->where('end_date', '>', $request->start_date)
+            ->where('start_date', '<', $newEndWithBuffer)
+            ->whereRaw('DATE_ADD(end_date, INTERVAL buffer_time HOUR) > ?', [$request->start_date])
             ->count();
 
         if ($overlappingCount >= $asset->quantity) {
@@ -214,6 +218,7 @@ class BookingController extends Controller
             'id' => $newId,
             'user_id' => $request->user()?->id, // Null if guest
             'status' => 'Approved',
+            'buffer_time' => $asset->buffer_time,
             'payment_image' => $paymentImagePath,
             'id_image_path' => $idImagePath,
         ]));
