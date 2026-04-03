@@ -238,7 +238,7 @@ class BookingController extends Controller
             $asset->saveQuietly();
         }
 
-        return $this->successResponse($booking, 'Booking confirmed successfully', 201);
+        return $this->successResponse($booking, 'Your booking is confirmed. We’ve sent the details to your email.', 201);
     }
 
     /**
