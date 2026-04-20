@@ -1,0 +1,319 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Http\Controllers\Controller;
+use App\Models\Members;
+use App\Models\User;
+use App\Models\Booking;
+use App\Traits\ApiResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Exception;
+
+class MembersController extends Controller
+{
+    use ApiResponse;
+
+    /**
+     * Display a listing of members only.
+     */
+    public function index(Request $request)
+    {
+        try {
+            $limit = $request->input('limit', null);
+            $page = $request->input('page', 1);
+            $search = $request->input('search', null);
+
+            $query = User::with('member')->where('role', 'Member')->whereHas('member');
+
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', '%' . $search . '%')
+                        ->orWhere('email', 'like', '%' . $search . '%')
+                        ->orWhere('phone', 'like', '%' . $search . '%');
+                });
+            }
+
+            if ($limit) {
+                $users = $query->orderBy('created_at', 'DESC')
+                    ->paginate($limit, ['*'], 'page', $page);
+
+                $users->getCollection()->transform(function ($user) {
+                    return [
+                        'id' => $user->member->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'phone' => $user->phone,
+                        'status' => $user->status,
+                        'image' => isset($user->member->image) ? asset('storage/' . $user->member->image) : null,
+                    ];
+                });
+
+                $response = [
+                    'data' => $users->items(),
+                    'pagination' => [
+                        'total' => $users->total(),
+                        'current_page' => $users->currentPage(),
+                        'per_page' => $users->perPage(),
+                        'last_page' => $users->lastPage(),
+                        'from' => $users->firstItem(),
+                        'to' => $users->lastItem(),
+                        'next_page_url' => $users->nextPageUrl(),
+                        'previous_page_url' => $users->previousPageUrl(),
+                    ]
+                ];
+            } else {
+                $users = $query->orderBy('created_at', 'DESC')->get();
+                $users->transform(function ($user) {
+                    return [
+                        'id' => $user->member->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'phone' => $user->phone,
+                        'status' => $user->status,
+                        'image' => isset($user->member->image) ? asset('storage/' . $user->member->image) : null,
+                    ];
+                });
+                $response = [
+                    'data' => $users,
+                    'pagination' => [
+                        'total' => $users->count(),
+                        'current_page' => 1,
+                        'per_page' => $users->count(),
+                        'last_page' => 1,
+                        'from' => $users->isEmpty() ? 0 : 1,
+                        'to' => $users->count(),
+                        'next_page_url' => null,
+                        'previous_page_url' => null,
+                    ]
+                ];
+
+            }
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Members retrieved successfully',
+                'data' => $response['data'],
+                'pagination' => $response['pagination'] ?? null,
+            ]);
+
+        } catch (Exception $e) {
+            return $this->errorResponse($e->getMessage(), 500);
+        }
+    }
+
+    public function show($id)
+    {
+        try {
+            $member = Members::with('user')->find($id);
+            if (!$member) {
+                return $this->errorResponse('Member not found', 404);
+            }
+            return response()->json([
+                'status' => 200,
+                'message' => 'Member details retrieved successfully',
+                'data' => $member,
+            ]);
+        } catch (Exception $e) {
+            return $this->errorResponse($e->getMessage(), 500);
+        }
+    }
+
+    public function store(Request $request)
+    {
+        $id = $request->input('id');
+        $member = $id ? Members::with('user')->findOrFail($id) : new Members();
+        $user = $id ? $member->user : new User();
+
+        $rules = [
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email' . ($id ? ',' . $user->id : ''),
+            'phone' => 'required|regex:/^[0-9]{10}$/|unique:users,phone' . ($id ? ',' . $user->id : ''),
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'member_id' => 'nullable|string|max:255|unique:members,member_id' . ($id ? ',' . $id : ''),
+            'dob' => 'required|date',
+            'gender' => 'required|in:Male,Female,Other',
+            'address' => 'required|string|max:255',
+            'work' => 'nullable|string',
+        ];
+
+        $request->validate($rules);
+
+        DB::beginTransaction();
+        try {
+            // Update/Create User
+            $user->name = $request->name;
+            $user->email = $request->email;
+            $user->phone = $request->phone;
+            if (!$id) {
+                $user->password = Hash::make(Str::random(16));
+                $user->role = 'Member';
+                $user->status = 1;
+            }
+            $user->save();
+
+            // Handle Image Upload/Replacement
+            $imagePath = $member->image;
+            if ($request->hasFile('image')) {
+                // Delete old image if exists
+                if ($imagePath && Storage::disk('public')->exists($imagePath)) {
+                    Storage::disk('public')->delete($imagePath);
+                }
+                $imagePath = $request->file('image')->store('members', 'public');
+            }
+
+            // Handle Member ID Generation (only for new records if no ID is provided)
+            $memberId = $request->member_id;
+            if (!$id && !$memberId) {
+                $lastMember = Members::where('member_id', 'like', 'M' . date('Y') . '%')->latest('id')->first();
+                $nextNum = 11;
+                if ($lastMember && preg_match('/M\d{4}(\d+)/', $lastMember->member_id, $matches)) {
+                    $nextNum = (int) $matches[1] + 1;
+                }
+                $memberId = 'M' . date('Y') . str_pad($nextNum, 2, '0', STR_PAD_LEFT);
+            } elseif ($id && !$memberId) {
+                $memberId = $member->member_id; // Keep existing ID if not provided during update
+            }
+
+            // Update/Create Member Profile
+            $member->user_id = $user->id;
+            $member->member_id = $memberId;
+            $member->address = $request->address;
+            $member->dob = $request->dob;
+            $member->gender = $request->gender;
+            $member->work = $request->work;
+            $member->image = $imagePath;
+            $member->save();
+
+            DB::commit();
+
+            // Load member relationship for response
+            $user->load('member');
+            if ($user->member && $user->member->image) {
+                $user->member->image = asset('storage/' . $user->member->image);
+            }
+
+            return $this->successResponse($user, $id ? 'Member updated successfully' : 'Member created successfully', $id ? 200 : 201);
+
+        } catch (Exception $e) {
+            DB::rollBack();
+            return $this->errorResponse($e->getMessage(), 500);
+        }
+    }
+
+
+    /**
+     * Get details of non-members (guests who auto-registered).
+     */
+    public function nonMembers(Request $request)
+    {
+        try {
+            $limit = $request->input('limit', null);
+            $page = $request->input('page', 1);
+            $search = $request->input('search', null);
+
+            $query = User::where('role', 'Non-Member')->whereDoesntHave('member');
+
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', '%' . $search . '%')
+                        ->orWhere('email', 'like', '%' . $search . '%')
+                        ->orWhere('phone', 'like', '%' . $search . '%');
+                });
+            }
+
+            if ($limit) {
+                $users = $query->orderBy('created_at', 'DESC')
+                    ->paginate($limit, ['*'], 'page', $page);
+
+                $users->getCollection()->transform(function ($user) {
+                    return [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'phone' => $user->phone,
+                        'status' => $user->status
+                    ];
+                });
+
+                $response = [
+                    'data' => $users->items(),
+                    'pagination' => [
+                        'total' => $users->total(),
+                        'current_page' => $users->currentPage(),
+                        'per_page' => $users->perPage(),
+                        'last_page' => $users->lastPage(),
+                        'from' => $users->firstItem(),
+                        'to' => $users->lastItem(),
+                        'next_page_url' => $users->nextPageUrl() ?? null,
+                        'previous_page_url' => $users->previousPageUrl() ?? null,
+                    ]
+                ];
+            } else {
+                $users = $query->orderBy('created_at', 'DESC')->get();
+                $users->transform(function ($user) {
+                    return [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'phone' => $user->phone,
+                        'status' => $user->status
+                    ];
+                });
+                $response = [
+                    'data' => $users,
+                    'pagination' => [
+                        'total' => $users->count(),
+                        'current_page' => 1,
+                        'per_page' => $users->count(),
+                        'last_page' => 1,
+                        'from' => $users->isEmpty() ? 0 : 1,
+                        'to' => $users->count(),
+                        'next_page_url' => null,
+                        'previous_page_url' => null,
+                    ]
+                ];
+            }
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Non-members retrieved successfully',
+                'data' => $response['data'],
+                'pagination' => $response['pagination'] ?? null,
+            ]);
+
+        } catch (Exception $e) {
+            return $this->errorResponse($e->getMessage(), 500);
+        }
+    }
+
+    public function toggleStatus(Request $request, $id)
+    {
+        try {
+            $user = User::findOrFail($id);
+            $user->status = ($user->status == 1) ? 0 : 1;
+            $user->save();
+
+            return $this->successResponse($user, 'Status updated successfully');
+        } catch (Exception $e) {
+            return $this->errorResponse($e->getMessage(), 500);
+        }
+    }
+
+    public function toggleStatusNonMembers(Request $request, $id)
+    {
+        try {
+            $user = User::findOrFail($id);
+            $user->status = ($user->status == 1) ? 0 : 1;
+            $user->save();
+
+            return $this->successResponse($user, 'Status updated successfully');
+        } catch (Exception $e) {
+            return $this->errorResponse($e->getMessage(), 500);
+        }
+    }
+}

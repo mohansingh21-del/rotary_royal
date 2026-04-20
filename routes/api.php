@@ -11,6 +11,9 @@ use App\Http\Controllers\Api\BannerController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
+use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\MembersController;
+
 /*
  |--------------------------------------------------------------------------
  | API Routes
@@ -19,55 +22,75 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
 
-    Route::post('auth/login', [AuthController::class , 'login']);
-    Route::post('auth/forgot-password', [AuthController::class , 'forgotPassword']);
-    Route::post('auth/reset-password', [AuthController::class , 'resetPassword']);
-    Route::post('donations', [DonationController::class , 'store']); // Public Donation Creator
-    Route::post('bookings', [BookingController::class , 'store']); // Public Booking Creator (Guest Friendly)
-    Route::get('assets', [AssetController::class , 'index']);
-    Route::get('banners', [BannerController::class , 'publicBanners']);
-    Route::get('members', [UserController::class , 'activeMembers']);
+    Route::post('auth/login', [AuthController::class, 'login']);
+    Route::post('auth/forgot-password', [AuthController::class, 'forgotPassword']);
+    Route::post('auth/reset-password', [AuthController::class, 'resetPassword']);
+    Route::post('auth/send-otp', [AuthController::class, 'sendOtp']);
+    Route::post('auth/verify-otp', [AuthController::class, 'verifyOtp']);
+    Route::post('auth/resend-otp', [AuthController::class, 'resendOtp']);
+
+    Route::post('donations', [DonationController::class, 'store']); // Public Donation Creator
+    Route::post('bookings', [BookingController::class, 'store']); // Public Booking Creator (Guest Friendly)
+    Route::get('assets', [AssetController::class, 'index']);
+    Route::get('banners', [BannerController::class, 'publicBanners']);
+    Route::get('members', [UserController::class, 'activeMembers']);
 
     // Protected Admin Routes
-    Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
+    Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(
+        function () {
 
-            Route::post('/auth/logout', [AuthController::class , 'logout']);
+            Route::post('/auth/logout', [AuthController::class, 'logout']);
 
             // Assets
-            Route::get('assets', [AssetController::class , 'index']);
-            Route::post('assets', [AssetController::class , 'store']);
-            Route::patch('assets/{id}/status', [AssetController::class , 'toggleStatus']);
-            Route::delete('assets/{id}', [AssetController::class , 'destroy']);
+            Route::get('assets', [AssetController::class, 'index']);
+            Route::post('assets', [AssetController::class, 'store']);
+            Route::patch('assets/{id}/status', [AssetController::class, 'toggleStatus']);
+            Route::delete('assets/{id}', [AssetController::class, 'destroy']);
 
             // Bookings
-            Route::get('bookings', [BookingController::class , 'index']);
-            Route::post('bookings/reject', [BookingController::class , 'reject']);
-            Route::patch('bookings/{booking}/status', [BookingController::class , 'updateStatus']);
+            Route::get('bookings', [BookingController::class, 'index']);
+            Route::post('bookings/reject', [BookingController::class, 'reject']);
+            Route::patch('bookings/{booking}/status', [BookingController::class, 'updateStatus']);
 
             // Donations
-            Route::get('donations', [DonationController::class , 'index']);
-            Route::post('donations/marquee-message', [DonationController::class , 'storeMarqueeMessage']);
-            Route::patch('donations/{donation}/marquee', [DonationController::class , 'toggleMarquee']);
+            Route::get('donations', [DonationController::class, 'index']);
+            Route::post('donations/marquee-message', [DonationController::class, 'storeMarqueeMessage']);
+            Route::patch('donations/{donation}/marquee', [DonationController::class, 'toggleMarquee']);
 
             // Settings
-            Route::get('settings/{key}', [SettingController::class , 'getSetting']);
-            Route::post('settings/bank', [SettingController::class , 'updateBankDetails']);
-            Route::post('settings/marquee', [SettingController::class , 'updateMarqueeSettings']);
+            Route::get('settings/{key}', [SettingController::class, 'getSetting']);
+            Route::post('settings/bank', [SettingController::class, 'updateBankDetails']);
+            Route::post('settings/marquee', [SettingController::class, 'updateMarqueeSettings']);
 
             // Notifications
-            Route::get('notifications', [NotificationController::class , 'index']);
-            Route::post('notifications/{id}/read', [NotificationController::class , 'markAsRead']);
-            Route::post('notifications/read-all', [NotificationController::class , 'markAllAsRead']);
+            Route::get('notifications', [NotificationController::class, 'index']);
+            Route::post('notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+            Route::post('notifications/read-all', [NotificationController::class, 'markAllAsRead']);
 
-            // Members
-            Route::apiResource('users', UserController::class);
-            Route::patch('users/{id}/status', [UserController::class , 'toggleStatus']);
+            // Members and Non-Members
+            Route::get('users', [MembersController::class, 'index']);
+            Route::get('non-members', [MembersController::class, 'nonMembers']);
+            Route::patch('users/{id}/status', [MembersController::class, 'toggleStatus']);
+            Route::get('users/{id}', [MembersController::class, 'show']);
+            Route::post('users', [MembersController::class, 'store']);
+            Route::patch('non-member/{id}/status', [MembersController::class, 'toggleStatusNonMembers']);
 
             // Banners
-            Route::get('banners', [BannerController::class , 'index']);
-            Route::post('banners', [BannerController::class , 'store']);
-            Route::patch('banners/{id}/status', [BannerController::class , 'toggleStatus']);
-            Route::delete('banners/{id}', [BannerController::class , 'destroy']);
+            Route::get('banners', [BannerController::class, 'index']);
+            Route::post('banners', [BannerController::class, 'store']);
+            Route::patch('banners/{id}/status', [BannerController::class, 'toggleStatus']);
+            Route::delete('banners/{id}', [BannerController::class, 'destroy']);
         }
-        );
+    );
+
+    Route::middleware(['auth:sanctum'])->prefix('user')->group(function () {
+        Route::get('profile', [ProfileController::class, 'profile']);
+        Route::post('profile/update', [ProfileController::class, 'updateProfile']);
+        Route::patch('profile/deactivate', [ProfileController::class, 'deactivate']);
+        Route::get('user-bookings', [BookingController::class, 'userBookings']);
     });
+});
+
+
+
+

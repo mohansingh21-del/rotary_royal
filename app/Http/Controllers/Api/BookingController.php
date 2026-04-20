@@ -13,6 +13,8 @@ use App\Traits\ApiResponse;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class BookingController extends Controller
 {
@@ -63,26 +65,26 @@ class BookingController extends Controller
                 $query->whereDate('end_date', '<=', $toDate);
             }
 
-           if($limit){
-             $bookings = $query->orderBy('created_at', 'DESC')
+            if ($limit) {
+                $bookings = $query->orderBy('created_at', 'DESC')
                     ->paginate($limit, ['*'], 'page', $page);
-            $bookings->getCollection()->transform(function ($booking) {
+                $bookings->getCollection()->transform(function ($booking) {
                     return [
-                    'id' => $booking->id,
-                    'asset_id' => $booking->asset_id,
-                    'assets_name' => $booking->asset?->name,
-                    'price' => $booking->asset?->price,
-                    'user_name' => $booking->user_name,
-                    'user_phone' => $booking->user_phone,
-                    'user_email' => $booking->user_email,
-                    'start_date' => $booking->start_date,
-                    'end_date' => $booking->end_date,
-                    'id_number' => $booking->id_number,
-                    'id_image_path' => $booking->id_image_path,
-                    'payment_image' => $booking->payment_image,
-                    'reference' => $booking->referrer?->name ?? $booking->reference,
-                    'status' => $booking->status,
-                    'buffer_time' => $booking->buffer_time,
+                        'id' => $booking->id,
+                        'asset_id' => $booking->asset_id,
+                        'assets_name' => $booking->asset?->name,
+                        'price' => $booking->asset?->price,
+                        'user_name' => $booking->user_name,
+                        'user_phone' => $booking->user_phone,
+                        'user_email' => $booking->user_email,
+                        'start_date' => $booking->start_date,
+                        'end_date' => $booking->end_date,
+                        'id_number' => $booking->id_number,
+                        'id_image_path' => $booking->id_image_path,
+                        'payment_image' => $booking->payment_image,
+                        'reference' => $booking->referrer?->name ?? $booking->reference,
+                        'status' => $booking->status,
+                        'buffer_time' => $booking->buffer_time,
                     ];
                 });
 
@@ -99,25 +101,25 @@ class BookingController extends Controller
                         'previous_page_url' => $bookings->previousPageUrl(),
                     ]
                 ];
-            }else{
+            } else {
                 $bookings = $query->orderBy('created_at', 'DESC')->get();
                 $bookings->transform(function ($booking) {
                     return [
-                    'id' => $booking->id,
-                    'asset_id' => $booking->asset_id,
-                    'assets_name' => $booking->asset?->name,
-                    'price' => $booking->asset?->price,
-                    'user_name' => $booking->user_name,
-                    'user_phone' => $booking->user_phone,
-                    'user_email' => $booking->user_email,
-                    'start_date' => $booking->start_date,
-                    'end_date' => $booking->end_date,
-                    'id_number' => $booking->id_number,
-                    'id_image_path' => $booking->id_image_path,
-                    'payment_image' => $booking->payment_image,
-                    'reference' => $booking->referrer?->name ?? $booking->reference,
-                    'status' => $booking->status,
-                    'buffer_time' => $booking->buffer_time,
+                        'id' => $booking->id,
+                        'asset_id' => $booking->asset_id,
+                        'assets_name' => $booking->asset?->name,
+                        'price' => $booking->asset?->price,
+                        'user_name' => $booking->user_name,
+                        'user_phone' => $booking->user_phone,
+                        'user_email' => $booking->user_email,
+                        'start_date' => $booking->start_date,
+                        'end_date' => $booking->end_date,
+                        'id_number' => $booking->id_number,
+                        'id_image_path' => $booking->id_image_path,
+                        'payment_image' => $booking->payment_image,
+                        'reference' => $booking->referrer?->name ?? $booking->reference,
+                        'status' => $booking->status,
+                        'buffer_time' => $booking->buffer_time,
                     ];
                 });
                 $response = [
@@ -135,14 +137,14 @@ class BookingController extends Controller
                 ];
             }
 
-          return response()->json([
+            return response()->json([
                 'status' => 200,
                 'message' => 'Bookings retrieved successfully',
                 'data' => $response['data'],
                 'pagination' => $response['pagination'] ?? null,
             ]);
-            
-        }catch(Exception $e){
+
+        } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
     }
@@ -159,19 +161,24 @@ class BookingController extends Controller
         $asset = Asset::findOrFail($request->asset_id);
 
         $request->validate([
-            'asset_id'       => 'required|exists:assets,id',
-            'payment_image'  => ($asset->price > 0 ? 'required' : 'nullable') . '|image|mimes:jpeg,png,jpg,gif,svg,webp|max:5120',
-            'user_name'      => 'required|string|max:255',
-            'user_phone'     => 'required|regex:/^[0-9]{10}$/',
-            'user_email'     => 'required|email',
-            'start_date'     => 'required|date|after_or_equal:now',
-            'end_date'       => 'required|date|after:start_date',
-            'id_number'      => 'required|string',
-            'id_image_path'  => 'required|image|mimes:jpeg,png,jpg,gif,svg,webp|max:5120',
-            'reference'      => 'nullable|string',
+            'asset_id' => 'required|exists:assets,id',
+            'payment_image' => ($asset->price > 0 ? 'required' : 'nullable') . '|image|mimes:jpeg,png,jpg,gif,svg,webp|max:5120',
+            'user_name' => 'required|string|max:255',
+            'user_phone' => 'required|regex:/^[0-9]{10}$/',
+            'user_email' => 'required|email',
+            'start_date' => 'required|date|after_or_equal:now',
+            'end_date' => 'required|date|after:start_date',
+            'id_number' => 'required|string',
+            'id_image_path' => 'required|image|mimes:jpeg,png,jpg,gif,svg,webp|max:5120',
+            'reference' => 'nullable|string',
         ], [
             'payment_image.required' => 'Payment image is required when the selected asset price is greater than 0.',
+            'id_image_path.required' => 'ID image is required.',
         ]);
+
+        if ($asset->left_quantity <= 0) {
+            return $this->errorResponse('Not Available: No more units of this asset are available.', 422);
+        }
 
         // Availability Check — detect overlapping approved bookings within the requested datetime range (including buffer time)
         $newEndWithBuffer = \Illuminate\Support\Carbon::parse($request->end_date)->addHours($asset->buffer_time);
@@ -207,16 +214,32 @@ class BookingController extends Controller
         // Generate custom Booking ID (BR-1001 style)
         $lastBooking = Booking::latest('id')->first();
         if ($lastBooking && preg_match('/BR-(\d+)/', $lastBooking->id, $matches)) {
-            $lastId = (int)$matches[1];
+            $lastId = (int) $matches[1];
             $newId = 'BR-' . ($lastId + 1);
         } else {
             $newId = 'BR-1001';
         }
 
+        // Auto-registration logic
+        $user = User::where('email', $request->user_email)
+            ->orWhere('phone', $request->user_phone)
+            ->first();
+
+        if (!$user) {
+            $user = User::create([
+                'name' => $request->user_name,
+                'email' => $request->user_email,
+                'phone' => $request->user_phone,
+                'password' => Hash::make(Str::random(16)),
+                'role' => 'Non-Member',
+                'status' => 1,
+            ]);
+        }
+
         // Create Booking (Default to Approved)
         $booking = Booking::create(array_merge($request->except(['payment_image', 'id_image_path']), [
             'id' => $newId,
-            'user_id' => $request->user()?->id, // Null if guest
+            'user_id' => $user->id,
             'status' => 'Approved',
             'buffer_time' => $asset->buffer_time,
             'payment_image' => $paymentImagePath,
@@ -231,11 +254,9 @@ class BookingController extends Controller
         // Notify User (including guests)
         Notification::route('mail', $booking->user_email)->notify(new BookingConfirmedNotification($booking));
 
-        // Keep left_quantity in sync
-        $asset->decrement('left_quantity');
-        if ($asset->left_quantity < 0) {
-            $asset->left_quantity = 0;
-            $asset->saveQuietly();
+        // Keep left_quantity in sync (Safely decrement)
+        if ($asset->left_quantity > 0) {
+            $asset->decrement('left_quantity');
         }
 
         return $this->successResponse($booking, 'Your booking is confirmed. We’ve sent the details to your email.', 201);
@@ -283,5 +304,49 @@ class BookingController extends Controller
         $booking->update(['status' => $request->status]);
 
         return $this->successResponse($booking, 'Booking status updated successfully');
+    }
+
+    /**
+     * Get bookings made by the logged-in user.
+     */
+    public function userBookings(Request $request)
+    {
+        try {
+            $user = $request->user();
+            $bookings = Booking::with(['asset', 'referrer'])
+                ->where('user_id', $user->id)
+                ->orderBy('created_at', 'DESC')
+                ->get();
+
+            $formattedBookings = $bookings->map(function ($booking) {
+                return [
+                    'id' => $booking->id,
+                    'asset_id' => $booking->asset_id,
+                    'assets_name' => $booking->asset?->name,
+                    'price' => $booking->asset?->price,
+                    'user_name' => $booking->user_name,
+                    'user_phone' => $booking->user_phone,
+                    'user_email' => $booking->user_email,
+                    'start_date' => $booking->start_date,
+                    'end_date' => $booking->end_date,
+                    'id_number' => $booking->id_number,
+                    'id_image_path' => $booking->id_image_path,
+                    'payment_image' => $booking->payment_image,
+                    'reference' => $booking->referrer?->name ?? $booking->reference,
+                    'status' => $booking->status,
+                    'buffer_time' => $booking->buffer_time,
+                    'rejection_reason' => $booking->rejection_reason,
+                ];
+            });
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Your bookings retrieved successfully',
+                'data' => $formattedBookings,
+            ]);
+
+        } catch (Exception $e) {
+            return $this->errorResponse($e->getMessage(), 500);
+        }
     }
 }
