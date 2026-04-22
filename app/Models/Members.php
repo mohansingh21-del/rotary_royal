@@ -17,6 +17,7 @@ class Members extends Model
         'gender',
         'image',
         'work',
+        'date_of_joining',
     ];
 
     public function user()

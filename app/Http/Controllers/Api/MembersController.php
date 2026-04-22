@@ -50,6 +50,7 @@ class MembersController extends Controller
                         'phone' => $user->phone,
                         'status' => $user->status,
                         'image' => isset($user->member->image) ? asset('storage/' . $user->member->image) : null,
+                        'date_of_joining' => $user->member->date_of_joining,
                     ];
                 });
 
@@ -76,6 +77,7 @@ class MembersController extends Controller
                         'phone' => $user->phone,
                         'status' => $user->status,
                         'image' => isset($user->member->image) ? asset('storage/' . $user->member->image) : null,
+                        'date_of_joining' => $user->member->date_of_joining,
                     ];
                 });
                 $response = [
@@ -134,11 +136,12 @@ class MembersController extends Controller
             'email' => 'required|email|unique:users,email' . ($id ? ',' . $user->id : ''),
             'phone' => 'required|regex:/^[0-9]{10}$/|unique:users,phone' . ($id ? ',' . $user->id : ''),
             'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
-            'member_id' => 'nullable|string|max:255|unique:members,member_id' . ($id ? ',' . $id : ''),
+            'member_id' => 'required|string|max:255|unique:members,member_id' . ($id ? ',' . $id : ''),
             'dob' => 'required|date',
             'gender' => 'required|in:Male,Female,Other',
             'address' => 'required|string|max:255',
             'work' => 'nullable|string',
+            'date_of_joining' => 'required|date',
         ];
 
         $request->validate($rules);
@@ -166,18 +169,8 @@ class MembersController extends Controller
                 $imagePath = $request->file('image')->store('members', 'public');
             }
 
-            // Handle Member ID Generation (only for new records if no ID is provided)
+            // Handle Member ID
             $memberId = $request->member_id;
-            if (!$id && !$memberId) {
-                $lastMember = Members::where('member_id', 'like', 'M' . date('Y') . '%')->latest('id')->first();
-                $nextNum = 11;
-                if ($lastMember && preg_match('/M\d{4}(\d+)/', $lastMember->member_id, $matches)) {
-                    $nextNum = (int) $matches[1] + 1;
-                }
-                $memberId = 'M' . date('Y') . str_pad($nextNum, 2, '0', STR_PAD_LEFT);
-            } elseif ($id && !$memberId) {
-                $memberId = $member->member_id; // Keep existing ID if not provided during update
-            }
 
             // Update/Create Member Profile
             $member->user_id = $user->id;
@@ -186,6 +179,7 @@ class MembersController extends Controller
             $member->dob = $request->dob;
             $member->gender = $request->gender;
             $member->work = $request->work;
+            $member->date_of_joining = $request->date_of_joining;
             $member->image = $imagePath;
             $member->save();
 

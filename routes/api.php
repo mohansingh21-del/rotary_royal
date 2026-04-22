@@ -13,6 +13,9 @@ use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\MembersController;
+use App\Http\Controllers\Api\ProjectController;
+use App\Http\Controllers\Api\EventController;
+use App\Http\Controllers\Api\CategoryController;
 
 /*
  |--------------------------------------------------------------------------
@@ -34,6 +37,11 @@ Route::prefix('v1')->group(function () {
     Route::get('assets', [AssetController::class, 'index']);
     Route::get('banners', [BannerController::class, 'publicBanners']);
     Route::get('members', [UserController::class, 'activeMembers']);
+    Route::get('projects', [ProjectController::class, 'index']);
+    Route::get('projects/{id}', [ProjectController::class, 'show']);
+    Route::get('events', [EventController::class, 'index']);
+    Route::get('events/{id}', [EventController::class, 'show']);
+    Route::get('categories', [CategoryController::class, 'publicCategories']);
 
     // Protected Admin Routes
     Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(
@@ -80,6 +88,27 @@ Route::prefix('v1')->group(function () {
             Route::post('banners', [BannerController::class, 'store']);
             Route::patch('banners/{id}/status', [BannerController::class, 'toggleStatus']);
             Route::delete('banners/{id}', [BannerController::class, 'destroy']);
+
+            // Projects
+            Route::get('projects', [ProjectController::class, 'index']);
+            Route::post('projects', [ProjectController::class, 'store']);
+            Route::get('projects/{id}', [ProjectController::class, 'show']);
+            Route::delete('projects/{id}', [ProjectController::class, 'destroy']);
+            Route::patch('projects/{id}/status', [ProjectController::class, 'toggleStatus']);
+
+            // Events
+            Route::get('events', [EventController::class, 'index']);
+            Route::post('events', [EventController::class, 'store']);
+            Route::get('events/{id}', [EventController::class, 'show']);
+            Route::delete('events/{id}', [EventController::class, 'destroy']);
+            Route::patch('events/{id}/status', [EventController::class, 'toggleStatus']);
+
+            // Categories
+            Route::get('categories', [CategoryController::class, 'index']);
+            Route::post('categories', [CategoryController::class, 'store']);
+            Route::get('categories/{id}', [CategoryController::class, 'show']);
+            Route::patch('categories/{id}/status', [CategoryController::class, 'toggleStatus']);
+            Route::delete('categories/{id}', [CategoryController::class, 'destroy']);
         }
     );
 

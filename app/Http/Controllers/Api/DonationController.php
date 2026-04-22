@@ -105,18 +105,20 @@ class DonationController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'donor_name' => 'required|string|max:255',
-            'amount' => 'required|numeric|min:0',
-            'date' => 'nullable|date',
-            'foundation_name' => 'nullable|string|max:255',
+            'project_id'     => 'nullable|exists:projects,id',
+            'donor_name'     => 'required|string|max:255',
+            'amount'         => 'required|numeric|min:0',
+            'date'           => 'nullable|date',
+            'foundation_name'=> 'nullable|string|max:255',
         ]);
 
         $donation = Donation::create([
-            'donor_name' => $request->donor_name,
-            'amount' => $request->amount,
-            'date' => $request->date ?? now()->toDateString(),
+            'project_id'      => $request->project_id,
+            'donor_name'      => $request->donor_name,
+            'amount'          => $request->amount,
+            'date'            => $request->date ?? now()->toDateString(),
             'foundation_name' => $request->foundation_name,
-            'is_marquee' => true, // Default to true as requested
+            'is_marquee'      => true,
         ]);
 
         return $this->successResponse($donation, 'Donation recorded successfully', 201);
