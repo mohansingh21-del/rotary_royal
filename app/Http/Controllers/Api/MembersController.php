@@ -298,7 +298,16 @@ class MembersController extends Controller
     public function toggleStatus(Request $request, $id)
     {
         try {
-            $user = User::findOrFail($id);
+            $user = User::find($id);
+
+            if (!$user) {
+                return $this->errorResponse('User not found', 404);
+            }
+
+            if ($user->role === 'Super Admin') {
+                return $this->errorResponse('Status of a Super Admin cannot be toggled', 403);
+            }
+
             $user->status = ($user->status == 1) ? 0 : 1;
             $user->save();
 

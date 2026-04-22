@@ -36,11 +36,14 @@ class DonationController extends Controller
 
                 $donations->getCollection()->transform(function ($donation) {
                     return [
-                    'id' => $donation->id,
-                    'donor_name' => $donation->donor_name,
-                    'amount' => $donation->amount,
-                    'date' => $donation->date,
-                    'is_marquee' => $donation->is_marquee,
+                        'id' => $donation->id,
+                        'donor_name' => $donation->donor_name,
+                        'mobile_no' => $donation->mobile_no,
+                        'amount' => $donation->amount,
+                        'donated_for' => $donation->project?->name ?? 'Rotary Club',
+                        'date' => $donation->date,
+                        'is_marquee' => $donation->is_marquee,
+                        'payment_receipt' => $donation->payment_receipt ? asset($donation->payment_receipt) : null,
                     ];
                 });
 
@@ -57,17 +60,19 @@ class DonationController extends Controller
                         'previous_page_url' => $donations->previousPageUrl(),
                     ]
                 ];
-            }
-            else {
+            } else {
                 $donations = $query->orderBy('created_at', 'DESC')->get();
 
                 $donations->transform(function ($donation) {
                     return [
-                    'id' => $donation->id,
-                    'donor_name' => $donation->donor_name,
-                    'amount' => $donation->amount,
-                    'date' => $donation->date,
-                    'is_marquee' => $donation->is_marquee,
+                        'id' => $donation->id,
+                        'donor_name' => $donation->donor_name,
+                        'mobile_no' => $donation->mobile_no,
+                        'amount' => $donation->amount,
+                        'donated_for' => $donation->project?->name ?? 'Rotary Club',
+                        'date' => $donation->date,
+                        'is_marquee' => $donation->is_marquee,
+                        'payment_receipt' => $donation->payment_receipt ? asset($donation->payment_receipt) : null,
                     ];
                 });
 
@@ -93,8 +98,7 @@ class DonationController extends Controller
                 'pagination' => $response['pagination'] ?? null,
             ]);
 
-        }
-        catch (Exception $e) {
+        } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
     }
@@ -105,20 +109,30 @@ class DonationController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'project_id'     => 'nullable|exists:projects,id',
-            'donor_name'     => 'required|string|max:255',
-            'amount'         => 'required|numeric|min:0',
-            'date'           => 'nullable|date',
-            'foundation_name'=> 'nullable|string|max:255',
+            'project_id' => 'nullable|exists:projects,id',
+            'donor_name' => 'required|string|max:255',
+            'mobile_no' => 'required|string|max:20',
+            'amount' => 'required|numeric|min:0',
+            'payment_receipt' => 'required|image|mimes:jpeg,png,jpg,gif,svg,webp|max:5120',
         ]);
 
+        $paymentReceiptPath = null;
+        if ($request->hasFile('payment_receipt')) {
+            $file = $request->file('payment_receipt');
+            $filename = time() . '_' . $file->getClientOriginalName();
+            $file->move(public_path('donations'), $filename);
+            $paymentReceiptPath = '/donations/' . $filename;
+        }
+
         $donation = Donation::create([
-            'project_id'      => $request->project_id,
-            'donor_name'      => $request->donor_name,
-            'amount'          => $request->amount,
-            'date'            => $request->date ?? now()->toDateString(),
+            'project_id' => $request->project_id,
+            'donor_name' => $request->donor_name,
+            'mobile_no' => $request->mobile_no,
+            'amount' => $request->amount,
+            'date' => $request->date ?? now()->toDateString(),
             'foundation_name' => $request->foundation_name,
-            'is_marquee'      => true,
+            'is_marquee' => true,
+            'payment_receipt' => $paymentReceiptPath,
         ]);
 
         return $this->successResponse($donation, 'Donation recorded successfully', 201);
@@ -138,8 +152,7 @@ class DonationController extends Controller
                 'message' => 'Marquee status updated successfully',
                 'data' => $donation,
             ]);
-        }
-        catch (Exception $e) {
+        } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
     }
@@ -155,8 +168,7 @@ class DonationController extends Controller
                 $marqueeMessage->update([
                     'marquee_message' => $request->marquee_message,
                 ]);
-            }
-            else {
+            } else {
                 $marqueeMessage = MarqueeMessage::create([
                     'marquee_message' => $request->marquee_message,
                 ]);
@@ -167,8 +179,72 @@ class DonationController extends Controller
                 'message' => 'Marquee message stored successfully',
                 'data' => $marqueeMessage,
             ]);
+        } catch (Exception $e) {
+            return $this->errorResponse($e->getMessage(), 500);
         }
-        catch (Exception $e) {
+    }
+
+    public function getMarqueeMessage()
+    {
+        try {
+            $marqueeMessage = MarqueeMessage::first();
+            return response()->json([
+                'status' => 200,
+                'message' => 'Marquee message retrieved successfully',
+                'data' => $marqueeMessage,
+            ]);
+        } catch (Exception $e) {
+            return $this->errorResponse($e->getMessage(), 500);
+        }
+    }
+
+    public function getMarqueeMessagePublic()
+    {
+        try {
+            $marqueeMessage = MarqueeMessage::first();
+            $donors = Donation::where('is_marquee', true)
+                ->orderBy('created_at', 'DESC')
+                ->pluck('donor_name')
+                ->toArray();
+
+            $marqueeList = [];
+            if ($marqueeMessage && $marqueeMessage->marquee_message) {
+                $marqueeList[] = $marqueeMessage->marquee_message;
+            }
+
+            if (!empty($donors)) {
+                $donorsText = "Special thanks to our donors: " . implode(', ', $donors);
+                $marqueeList[] = $donorsText;
+            }
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Marquee message and donor list retrieved successfully',
+                'data' => [
+                    'marquee_message' => $marqueeMessage ? $marqueeMessage->marquee_message : null,
+                    'marquee_donors' => $donors,
+                    'combined_list' => $marqueeList,
+                ],
+            ]);
+        } catch (Exception $e) {
+            return $this->errorResponse($e->getMessage(), 500);
+        }
+    }
+
+    public function getDonors()
+    {
+        try {
+            $donors = Donation::where('date', '>=', now()->subDays(7)->toDateString())
+                ->orderBy('date', 'DESC')
+                ->orderBy('created_at', 'DESC')
+                ->get(['donor_name', 'amount', 'date']);
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Donors for the last 7 days retrieved successfully',
+                'data' => $donors,
+            ]);
+        } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
     }

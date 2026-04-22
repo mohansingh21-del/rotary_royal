@@ -24,9 +24,11 @@ class AssetController extends Controller
             $page = $request->input('page', 1);
             $search = $request->input('search', null);
 
-            $query = Asset::withCount(['bookings as approved_bookings_count' => function ($q) {
-                $q->where('status', 'Approved');
-            }]);
+            $query = Asset::withCount([
+                'bookings as approved_bookings_count' => function ($q) {
+                    $q->where('status', 'Approved');
+                }
+            ]);
 
             if ($search) {
                 $query->where('name', 'like', '%' . $search . '%')
@@ -39,15 +41,15 @@ class AssetController extends Controller
 
                 $assets->getCollection()->transform(function ($asset) {
                     return [
-                    'id' => $asset->id,
-                    'name' => $asset->name,
-                    'category' => $asset->category,
-                    'quantity' => $asset->quantity,
-                    'left_quantity' => $asset->left_quantity,
-                    'buffer_time' => $asset->buffer_time,
-                    'price' => $asset->price,
-                    'image' => $asset->image,
-                    'status' => ($asset->left_quantity === 0) ? 0 : $asset->status
+                        'id' => $asset->id,
+                        'name' => $asset->name,
+                        'category' => $asset->category,
+                        'quantity' => $asset->quantity,
+                        'left_quantity' => $asset->left_quantity,
+                        'buffer_time' => $asset->buffer_time,
+                        'price' => $asset->price,
+                        'image' => $asset->image,
+                        'status' => ($asset->left_quantity === 0) ? 0 : $asset->status
                     ];
                 });
 
@@ -64,20 +66,19 @@ class AssetController extends Controller
                         'previous_page_url' => $assets->previousPageUrl(),
                     ]
                 ];
-            }
-            else {
+            } else {
                 $assets = $query->orderBy('created_at', 'DESC')->get();
                 $assets->transform(function ($asset) {
                     return [
-                    'id' => $asset->id,
-                    'name' => $asset->name,
-                    'category' => $asset->category,
-                    'quantity' => $asset->quantity,
-                    'left_quantity' => $asset->left_quantity,
-                    'buffer_time' => $asset->buffer_time,
-                    'price' => $asset->price,
-                    'image' => $asset->image,
-                    'status' => ($asset->left_quantity === 0) ? 0 : $asset->status
+                        'id' => $asset->id,
+                        'name' => $asset->name,
+                        'category' => $asset->category,
+                        'quantity' => $asset->quantity,
+                        'left_quantity' => $asset->left_quantity,
+                        'buffer_time' => $asset->buffer_time,
+                        'price' => $asset->price,
+                        'image' => $asset->image,
+                        'status' => ($asset->left_quantity === 0) ? 0 : $asset->status
                     ];
                 });
                 $response = [
@@ -102,8 +103,7 @@ class AssetController extends Controller
                 'pagination' => $response['pagination'] ?? null,
             ]);
 
-        }
-        catch (Exception $e) {
+        } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
 
@@ -114,7 +114,7 @@ class AssetController extends Controller
         $id = $request->input('id');
 
         $request->merge([
-            'name' => trim((string)$request->input('name', '')),
+            'name' => trim((string) $request->input('name', '')),
         ]);
 
         $rules = [
@@ -123,12 +123,12 @@ class AssetController extends Controller
                 'string',
                 'max:255',
                 Rule::unique('assets')
-                ->ignore($id)
-                ->where(function ($query) use ($request) {
-            return $query
-            ->where('category', $request->input('category'))
-            ->whereNull('deleted_at');
-        }),
+                    ->ignore($id)
+                    ->where(function ($query) use ($request) {
+                        return $query
+                            ->where('category', $request->input('category'))
+                            ->whereNull('deleted_at');
+                    }),
             ],
             'category' => 'required|in:Asset,Consumable',
             'quantity' => 'required|integer|min:1',
@@ -139,24 +139,24 @@ class AssetController extends Controller
 
         $validated = $request->validate(
             $id ? array_merge(['id' => 'required|exists:assets,id'], $rules) : $rules,
-        [
-            'name.unique' => 'An asset with this name and category already exists.',
-            'quantity.min' => 'Quantity must be greater than 0.',
-        ]
+            [
+                'name.unique' => 'An asset with this name and category already exists.',
+                'quantity.min' => 'Quantity must be greater than 0.',
+            ]
         );
 
-        $asset = $request->id ?Asset::findOrFail($request->id) : new Asset();
+        $asset = $request->id ? Asset::findOrFail($request->id) : new Asset();
 
         if ($request->hasFile('image')) {
-            if ($request->id && file_exists(public_path($asset->image))) {
+            if ($request->id && $asset->image && file_exists(public_path($asset->image))) {
                 unlink(public_path($asset->image));
             }
 
             $file = $request->file('image');
             $filename = $file->hashName();
-            $file->move(public_path('assets'), $filename);
+            $file->move(public_path('inventory_assets'), $filename);
 
-            $asset->image = '/assets/' . $filename;
+            $asset->image = '/inventory_assets/' . $filename;
         }
 
         $asset->name = $validated['name'];
@@ -167,7 +167,7 @@ class AssetController extends Controller
 
         // Recalculate left_quantity based on approved bookings
         $approvedCount = $asset->id
-            ?Booking::where('asset_id', $asset->id)->where('status', 'Approved')->count()
+            ? Booking::where('asset_id', $asset->id)->where('status', 'Approved')->count()
             : 0;
         $asset->left_quantity = max(0, $validated['quantity'] - $approvedCount);
 
@@ -200,12 +200,11 @@ class AssetController extends Controller
                 return $this->errorResponse('Cannot mark as available: no stock left (left_quantity is 0)', 422);
             }
 
-            $asset->status = (int)(!$asset->status);
+            $asset->status = (int) (!$asset->status);
             $asset->save();
 
             return $this->successResponse($asset, 'Asset status updated successfully');
-        }
-        catch (Exception $e) {
+        } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
     }
@@ -226,8 +225,7 @@ class AssetController extends Controller
             $asset->delete();
 
             return $this->successResponse(null, 'Asset deleted successfully');
-        }
-        catch (Exception $e) {
+        } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
     }

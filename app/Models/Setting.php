@@ -10,11 +10,21 @@ class Setting extends Model
     use HasFactory;
 
     protected $fillable = [
-        'key',
-        'value',
+        'account_holder_name',
+        'account_number',
+        'ifsc_code',
+        'bank_name',
+        'branch',
+        'contact_numbers',
+        'email_address',
+        'office_address',
+        'upi_id',
+        'payment_qr_code',
+        'marquee_common_message',
+        'marquee_items',
     ];
 
     protected $casts = [
-        'value' => 'json',
+        'marquee_items' => 'json',
     ];
 }
