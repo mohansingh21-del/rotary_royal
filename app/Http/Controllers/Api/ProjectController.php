@@ -327,6 +327,79 @@ class ProjectController extends Controller
         }
     }
 
+    public function publicProjects(Request $request)
+    {
+        try {
+            $limit = $request->input('limit', null);
+            $page = $request->input('page', 1);
+            $search = $request->input('search', null);
+            $status = $request->input('status', null);
+
+            $query = Project::with('images')->where('is_active', 1);
+
+            if ($status) {
+                $query->where('status', $status);
+            }
+
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', '%' . $search . '%')
+                        ->orWhere('description', 'like', '%' . $search . '%');
+                });
+            }
+
+            $query->orderBy('created_at', 'DESC');
+
+            if ($limit) {
+                $projects = $query->paginate($limit, ['*'], 'page', $page);
+                $projects->getCollection()->transform(function ($project) {
+                    return $this->formatProject($project);
+                });
+
+                $response = [
+                    'data' => $projects->items(),
+                    'pagination' => [
+                        'total' => $projects->total(),
+                        'current_page' => $projects->currentPage(),
+                        'per_page' => $projects->perPage(),
+                        'last_page' => $projects->lastPage(),
+                        'from' => $projects->firstItem(),
+                        'to' => $projects->lastItem(),
+                        'next_page_url' => $projects->nextPageUrl(),
+                        'previous_page_url' => $projects->previousPageUrl(),
+                    ]
+                ];
+            } else {
+                $projects = $query->get()->map(function ($project) {
+                    return $this->formatProject($project);
+                });
+                $response = [
+                    'data' => $projects,
+                    'pagination' => [
+                        'total' => $projects->count(),
+                        'current_page' => 1,
+                        'per_page' => $projects->count(),
+                        'last_page' => 1,
+                        'from' => $projects->isEmpty() ? 0 : 1,
+                        'to' => $projects->count(),
+                        'next_page_url' => null,
+                        'previous_page_url' => null,
+                    ]
+                ];
+            }
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Projects fetched successfully',
+                'data' => $response['data'],
+                'pagination' => $response['pagination'] ?? null,
+            ]);
+
+        } catch (Exception $e) {
+            return $this->errorResponse($e->getMessage(), 500);
+        }
+    }
+
     /**
      * Private override for pagination response if needed
      * Note: The index method already handles it, but successResponse is a bit different here.

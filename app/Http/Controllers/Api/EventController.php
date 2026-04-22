@@ -322,10 +322,101 @@ class EventController extends Controller
     {
         try {
             $event = Event::findOrFail($id);
-            $event->is_active = ($event->is_active == 1) ? 9 : 1;
+            $event->is_active = ($event->is_active == 1) ? 0 : 1;
             $event->save();
 
             return $this->successResponse($event, 'Status updated successfully');
+        } catch (Exception $e) {
+            return $this->errorResponse($e->getMessage(), 500);
+        }
+    }
+    public function publicEvents(Request $request)
+    {
+        try {
+            $limit = $request->input('limit', null);
+            $page = $request->input('page', 1);
+            $search = $request->input('search', null);
+            $category_id = $request->input('category_id', null);
+            $from_date = $request->input('from_date', null);
+            $to_date = $request->input('to_date', null);
+            $event = $request->input('event', null);
+
+            $query = Event::with(['images', 'category'])->where('is_active', 1);
+
+            if ($event == "upcoming") {
+                $query->where('date', '>=', date('Y-m-d'));
+            } elseif ($event == "past") {
+                $query->where('date', '<', date('Y-m-d'));
+            }
+
+            if ($category_id) {
+                $query->where('category_id', $category_id);
+            }
+
+            if ($from_date) {
+                $query->where('date', '>=', $from_date);
+            }
+
+            if ($to_date) {
+                $query->where('date', '<=', $to_date);
+            }
+
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', '%' . $search . '%')
+                        ->orWhere('description', 'like', '%' . $search . '%')
+                        ->orWhere('location', 'like', '%' . $search . '%');
+                });
+            }
+
+            $query->orderBy('date', 'ASC');
+
+            if ($limit) {
+                $events = $query->paginate($limit, ['*'], 'page', $page);
+                $events->getCollection()->transform(function ($event) {
+                    return $this->formatEvent($event);
+                });
+
+                $response = [
+                    'data' => $events->items(),
+                    'pagination' => [
+                        'total' => $events->total(),
+                        'current_page' => $events->currentPage(),
+                        'per_page' => $events->perPage(),
+                        'last_page' => $events->lastPage(),
+                        'from' => $events->firstItem(),
+                        'to' => $events->lastItem(),
+                        'next_page_url' => $events->nextPageUrl(),
+                        'previous_page_url' => $events->previousPageUrl(),
+                    ]
+                ];
+            } else {
+                $events = $query->get()->map(function ($event) {
+                    return $this->formatEvent($event);
+                });
+
+                $response = [
+                    'data' => $events,
+                    'pagination' => [
+                        'total' => $events->count(),
+                        'current_page' => 1,
+                        'per_page' => $events->count(),
+                        'last_page' => 1,
+                        'from' => $events->isEmpty() ? 0 : 1,
+                        'to' => $events->count(),
+                        'next_page_url' => null,
+                        'previous_page_url' => null,
+                    ]
+                ];
+            }
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Events fetched successfully',
+                'data' => $response['data'],
+                'pagination' => $response['pagination'] ?? null,
+            ]);
+
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }

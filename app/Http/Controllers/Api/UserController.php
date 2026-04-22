@@ -22,11 +22,25 @@ class UserController extends Controller
     public function activeMembers(Request $request)
     {
         try {
-            $users = User::where('role', 'Member')
+            $search = $request->input('search');
+
+            $query = User::with('member')
+                ->where('role', 'Member')
                 ->where('status', '1')
-                ->whereHas('member')
-                ->orderBy('id', 'DESC')
-                ->get();
+                ->whereHas('member');
+
+            if ($search) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('name', 'like', '%' . $search . '%')
+                        ->orWhere('email', 'like', '%' . $search . '%')
+                        ->orWhere('phone', 'like', '%' . $search . '%')
+                        ->orWhereHas('member', function ($mq) use ($search) {
+                            $mq->where('member_id', 'like', '%' . $search . '%');
+                        });
+                });
+            }
+
+            $users = $query->orderBy('id', 'DESC')->get();
 
             return $this->successResponse($users, 'Active members retrieved successfully');
         } catch (Exception $e) {

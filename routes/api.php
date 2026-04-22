@@ -37,9 +37,9 @@ Route::prefix('v1')->group(function () {
     Route::get('assets', [AssetController::class, 'index']);
     Route::get('banners', [BannerController::class, 'publicBanners']);
     Route::get('members', [UserController::class, 'activeMembers']);
-    Route::get('projects', [ProjectController::class, 'index']);
+    Route::get('projects', [ProjectController::class, 'publicProjects']);
     Route::get('projects/{id}', [ProjectController::class, 'show']);
-    Route::get('events', [EventController::class, 'index']);
+    Route::get('events', [EventController::class, 'publicEvents']);
     Route::get('events/{id}', [EventController::class, 'show']);
     Route::get('categories', [CategoryController::class, 'publicCategories']);
 
