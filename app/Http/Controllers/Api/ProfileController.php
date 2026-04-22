@@ -38,7 +38,7 @@ class ProfileController extends Controller
                     'dob' => $member->dob ?? null,
                     'gender' => $member->gender ?? null,
                     'image' => isset($member->image)
-                        ? asset('storage/' . $member->image)
+                        ? asset($member->image)
                         : null,
                     'work' => $member->work ?? null,
 
@@ -76,14 +76,16 @@ class ProfileController extends Controller
             ]);
 
             // Handle Profile Image
-            $imagePath = $member->image ?? null;
             if ($request->hasFile('image')) {
                 // Delete old image if exists
-                if ($imagePath && Storage::disk('public')->exists($imagePath)) {
-                    Storage::disk('public')->delete($imagePath);
+                if ($member && $member->image && file_exists(public_path($member->image))) {
+                    @unlink(public_path($member->image));
                 }
                 // Store new image
-                $imagePath = $request->file('image')->store('members', 'public');
+                $file = $request->file('image');
+                $filename = $file->hashName();
+                $file->move(public_path('members'), $filename);
+                $imagePath = '/members/' . $filename;
             }
 
             // Sync Member details
@@ -114,7 +116,7 @@ class ProfileController extends Controller
                     'dob' => $member->dob ?? null,
                     'gender' => $member->gender ?? null,
                     'image' => isset($member->image)
-                        ? asset('storage/' . $member->image)
+                        ? asset($member->image)
                         : null,
                     'work' => $member->work ?? null,
 

@@ -18,8 +18,7 @@ class CategoryController extends Controller
     public function index(Request $request)
     {
         try {
-            $type = $request->query('type', 'event');
-            $categories = Category::where('type', $type)->get();
+            $categories = Category::get();
             return $this->successResponse($categories, 'Categories retrieved successfully');
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
@@ -36,7 +35,6 @@ class CategoryController extends Controller
         $request->validate([
             'id' => $id ? 'required|exists:categories,id' : 'nullable',
             'name' => 'required|string|max:255',
-            'type' => 'nullable|string|max:255',
         ]);
 
         try {
@@ -44,7 +42,6 @@ class CategoryController extends Controller
 
             $category->name = $request->name;
             if (!$id) {
-                $category->type = $request->input('type', 'event');
                 $category->is_active = 1;
             }
 

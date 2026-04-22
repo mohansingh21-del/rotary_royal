@@ -42,7 +42,21 @@ class UserController extends Controller
 
             $users = $query->orderBy('id', 'DESC')->get();
 
-            return $this->successResponse($users, 'Active members retrieved successfully');
+            $data = $users->map(function ($user) {
+                return [
+                    'id' => $user->member->id,
+                    'user_id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'phone' => $user->phone,
+                    'status' => $user->status,
+                    'image' => $user->member->image ? asset($user->member->image) : null,
+                    'date_of_joining' => $user->member->date_of_joining,
+                    'member_id' => $user->member->member_id,
+                ];
+            });
+
+            return $this->successResponse($data, 'Active members retrieved successfully');
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }

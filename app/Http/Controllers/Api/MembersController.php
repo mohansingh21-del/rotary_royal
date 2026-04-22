@@ -45,12 +45,14 @@ class MembersController extends Controller
                 $users->getCollection()->transform(function ($user) {
                     return [
                         'id' => $user->member->id,
+                        'user_id' => $user->id,
                         'name' => $user->name,
                         'email' => $user->email,
                         'phone' => $user->phone,
                         'status' => $user->status,
-                        'image' => isset($user->member->image) ? asset('storage/' . $user->member->image) : null,
+                        'image' => isset($user->member->image) ? asset($user->member->image) : null,
                         'date_of_joining' => $user->member->date_of_joining,
+                        'member_id' => $user->member->member_id,
                     ];
                 });
 
@@ -72,12 +74,14 @@ class MembersController extends Controller
                 $users->transform(function ($user) {
                     return [
                         'id' => $user->member->id,
+                        'user_id' => $user->id,
                         'name' => $user->name,
                         'email' => $user->email,
                         'phone' => $user->phone,
                         'status' => $user->status,
-                        'image' => isset($user->member->image) ? asset('storage/' . $user->member->image) : null,
+                        'image' => isset($user->member->image) ? asset($user->member->image) : null,
                         'date_of_joining' => $user->member->date_of_joining,
+                        'member_id' => $user->member->member_id,
                     ];
                 });
                 $response = [
@@ -115,6 +119,11 @@ class MembersController extends Controller
             if (!$member) {
                 return $this->errorResponse('Member not found', 404);
             }
+
+            if ($member->image) {
+                $member->image = asset($member->image);
+            }
+
             return response()->json([
                 'status' => 200,
                 'message' => 'Member details retrieved successfully',
@@ -160,13 +169,15 @@ class MembersController extends Controller
             $user->save();
 
             // Handle Image Upload/Replacement
-            $imagePath = $member->image;
             if ($request->hasFile('image')) {
                 // Delete old image if exists
-                if ($imagePath && Storage::disk('public')->exists($imagePath)) {
-                    Storage::disk('public')->delete($imagePath);
+                if ($member->image && file_exists(public_path($member->image))) {
+                    @unlink(public_path($member->image));
                 }
-                $imagePath = $request->file('image')->store('members', 'public');
+                $file = $request->file('image');
+                $filename = $file->hashName();
+                $file->move(public_path('members'), $filename);
+                $member->image = '/members/' . $filename;
             }
 
             // Handle Member ID
@@ -180,7 +191,6 @@ class MembersController extends Controller
             $member->gender = $request->gender;
             $member->work = $request->work;
             $member->date_of_joining = $request->date_of_joining;
-            $member->image = $imagePath;
             $member->save();
 
             DB::commit();
@@ -188,7 +198,7 @@ class MembersController extends Controller
             // Load member relationship for response
             $user->load('member');
             if ($user->member && $user->member->image) {
-                $user->member->image = asset('storage/' . $user->member->image);
+                $user->member->image = asset($user->member->image);
             }
 
             return $this->successResponse($user, $id ? 'Member updated successfully' : 'Member created successfully', $id ? 200 : 201);

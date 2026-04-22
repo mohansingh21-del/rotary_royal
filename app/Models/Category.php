@@ -9,7 +9,7 @@ class Category extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'type', 'is_active'];
+    protected $fillable = ['name', 'is_active'];
 
     protected $casts = [
         'is_active' => 'integer',
