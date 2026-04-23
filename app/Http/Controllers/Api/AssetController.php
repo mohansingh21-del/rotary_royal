@@ -103,6 +103,8 @@ class AssetController extends Controller
                 'pagination' => $response['pagination'] ?? null,
             ]);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
@@ -111,78 +113,83 @@ class AssetController extends Controller
 
     public function store(Request $request)
     {
-        $id = $request->input('id');
+        try {
+            $id = $request->input('id');
 
-        $request->merge([
-            'name' => trim((string) $request->input('name', '')),
-        ]);
+            $request->merge([
+                'name' => trim((string) $request->input('name', '')),
+            ]);
 
-        $rules = [
-            'name' => [
-                'required',
-                'string',
-                'max:255',
-                Rule::unique('assets')
-                    ->ignore($id)
-                    ->where(function ($query) use ($request) {
-                        return $query
-                            ->where('category', $request->input('category'))
-                            ->whereNull('deleted_at');
-                    }),
-            ],
-            'category' => 'required|in:Asset,Consumable',
-            'quantity' => 'required|integer|min:1',
-            'buffer_time' => 'required|integer|min:0',
-            'price' => 'required|numeric|min:0',
-            'image' => ($id ? 'nullable' : 'required') . '|image|mimes:jpeg,png,jpg,gif,svg,webp|max:5120|dimensions:width=64,height=64',
-        ];
+            $rules = [
+                'name' => [
+                    'required',
+                    'string',
+                    'max:255',
+                    Rule::unique('assets')
+                        ->ignore($id)
+                        ->where(function ($query) use ($request) {
+                            return $query
+                                ->where('category', $request->input('category'))
+                                ->whereNull('deleted_at');
+                        }),
+                ],
+                'category' => 'required|in:Asset,Consumable',
+                'quantity' => 'required|integer|min:1',
+                'buffer_time' => 'required|integer|min:0',
+                'price' => 'required|numeric|min:0',
+                'image' => ($id ? 'nullable' : 'required') . '|image|mimes:jpeg,png,jpg,gif,svg,webp|max:5120|dimensions:width=64,height=64',
+            ];
 
-        $validated = $request->validate(
-            $id ? array_merge(['id' => 'required|exists:assets,id'], $rules) : $rules,
-            [
-                'name.unique' => 'An asset with this name and category already exists.',
-                'quantity.min' => 'Quantity must be greater than 0.',
-            ]
-        );
+            $validated = $request->validate(
+                $id ? array_merge(['id' => 'required|exists:assets,id'], $rules) : $rules,
+                [
+                    'name.unique' => 'An asset with this name and category already exists.',
+                    'quantity.min' => 'Quantity must be greater than 0.',
+                ]
+            );
 
-        $asset = $request->id ? Asset::findOrFail($request->id) : new Asset();
+            $asset = $request->id ? Asset::findOrFail($request->id) : new Asset();
 
-        if ($request->hasFile('image')) {
-            if ($request->id && $asset->image && file_exists(public_path($asset->image))) {
-                unlink(public_path($asset->image));
+            if ($request->hasFile('image')) {
+                if ($request->id && $asset->image && file_exists(public_path($asset->image))) {
+                    unlink(public_path($asset->image));
+                }
+
+                $file = $request->file('image');
+                $filename = $file->hashName();
+                $file->move(public_path('inventory_assets'), $filename);
+
+                $asset->image = '/inventory_assets/' . $filename;
             }
 
-            $file = $request->file('image');
-            $filename = $file->hashName();
-            $file->move(public_path('inventory_assets'), $filename);
+            $asset->name = $validated['name'];
+            $asset->category = $validated['category'];
+            $asset->quantity = $validated['quantity'];
+            $asset->buffer_time = $validated['buffer_time'];
+            $asset->price = $validated['price'];
 
-            $asset->image = '/inventory_assets/' . $filename;
+            // Recalculate left_quantity based on approved bookings
+            $approvedCount = $asset->id
+                ? Booking::where('asset_id', $asset->id)->where('status', 'Approved')->count()
+                : 0;
+            $asset->left_quantity = max(0, $validated['quantity'] - $approvedCount);
+
+            // Auto-enable asset if stock is now available
+            if ($asset->left_quantity > 0) {
+                $asset->status = 1;
+            }
+
+            $asset->save();
+
+            return $this->successResponse($asset, 'Asset saved successfully', $id ? 200 : 201);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return $this->errorResponse('Asset not found', 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse('Validation error', 422, $e->errors());
+        } catch (Exception $e) {
+            return $this->errorResponse('Failed to save asset: ' . $e->getMessage(), 500);
         }
-
-        $asset->name = $validated['name'];
-        $asset->category = $validated['category'];
-        $asset->quantity = $validated['quantity'];
-        $asset->buffer_time = $validated['buffer_time'];
-        $asset->price = $validated['price'];
-
-        // Recalculate left_quantity based on approved bookings
-        $approvedCount = $asset->id
-            ? Booking::where('asset_id', $asset->id)->where('status', 'Approved')->count()
-            : 0;
-        $asset->left_quantity = max(0, $validated['quantity'] - $approvedCount);
-
-        // Auto-enable asset if stock is now available
-        if ($asset->left_quantity > 0) {
-            $asset->status = 1;
-        }
-
-        $asset->save();
-
-        return response()->json([
-            'status' => 200,
-            'message' => 'Asset saved successfully',
-            'data' => $asset
-        ]);
     }
 
 
@@ -204,6 +211,8 @@ class AssetController extends Controller
             $asset->save();
 
             return $this->successResponse($asset, 'Asset status updated successfully');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
@@ -225,6 +234,8 @@ class AssetController extends Controller
             $asset->delete();
 
             return $this->successResponse(null, 'Asset deleted successfully');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }

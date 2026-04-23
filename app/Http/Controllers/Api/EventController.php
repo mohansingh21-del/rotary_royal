@@ -9,6 +9,7 @@ use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Exception;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class EventController extends Controller
 {
@@ -104,8 +105,10 @@ class EventController extends Controller
                 'pagination' => $response['pagination'] ?? null,
             ]);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Operation failed: ' . $e->getMessage(), 500);
         }
     }
 
@@ -133,40 +136,40 @@ class EventController extends Controller
      */
     public function store(Request $request)
     {
-        $id = $request->input('id');
-        $event = $id ? Event::findOrFail($id) : new Event();
+        try {
+            $id = $request->input('id');
+            $event = $id ? Event::findOrFail($id) : new Event();
 
-        $rules = [
-            'name' => 'required|string|max:255',
-            'date' => 'required|date',
-            'time' => 'required',
-            'location' => 'required|string|max:255',
-            'latitude' => 'nullable|numeric|between:-90,90',
-            'longitude' => 'nullable|numeric|between:-180,180',
-            'category_id' => 'nullable|exists:categories,id',
-            'description' => 'nullable|string',
-            'banner_image' => ($id ? 'nullable' : 'required') . '|image|mimes:jpeg,png,jpg|max:5120|dimensions:ratio=2/1',
-            'gallery_images' => 'nullable|array',
-            'gallery_images.*' => [
-                'nullable',
-                function ($attribute, $value, $fail) {
-                    if ($value instanceof \Illuminate\Http\UploadedFile) {
-                        $validator = \Illuminate\Support\Facades\Validator::make(
-                            ['file' => $value],
-                            ['file' => 'image|dimensions:ratio=1/1']
-                        );
-                        if ($validator->fails()) {
-                            $fail('The gallery image must have an aspect ratio of 1:1.');
+            $rules = [
+                'name' => 'required|string|max:255',
+                'date' => 'required|date',
+                'time' => 'required',
+                'location' => 'required|string|max:255',
+                'latitude' => 'nullable|numeric|between:-90,90',
+                'longitude' => 'nullable|numeric|between:-180,180',
+                'category_id' => 'nullable|exists:categories,id',
+                'description' => 'nullable|string',
+                'banner_image' => ($id ? 'nullable' : 'required') . '|image|mimes:jpeg,png,jpg|max:5120|dimensions:ratio=2/1',
+                'gallery_images' => 'nullable|array',
+                'gallery_images.*' => [
+                    'nullable',
+                    function ($attribute, $value, $fail) {
+                        if ($value instanceof \Illuminate\Http\UploadedFile) {
+                            $validator = \Illuminate\Support\Facades\Validator::make(
+                                ['file' => $value],
+                                ['file' => 'image|dimensions:ratio=1/1']
+                            );
+                            if ($validator->fails()) {
+                                $fail('The gallery image must have an aspect ratio of 1:1.');
+                            }
                         }
                     }
-                }
-            ],
-        ];
+                ],
+            ];
 
-        $request->validate($rules);
+            $request->validate($rules);
 
-        DB::beginTransaction();
-        try {
+            DB::beginTransaction();
             $event->name = $request->name;
             $event->date = $request->date;
             $event->time = $request->time;
@@ -193,7 +196,7 @@ class EventController extends Controller
 
             $event->save();
 
-            // Handle Gallery Images Syncing (Mixed: paths to keep + new files)
+            // Handle Gallery Images Syncing
             $galleryInput = $request->input('gallery_images', []);
             $pathsToKeep = [];
 
@@ -246,9 +249,15 @@ class EventController extends Controller
                 $id ? 200 : 201
             );
 
+        } catch (ModelNotFoundException $e) {
+            DB::rollBack();
+            return $this->errorResponse('Event not found', 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return $this->errorResponse('Validation error', 422, $e->errors());
         } catch (Exception $e) {
             DB::rollBack();
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Failed to save event: ' . $e->getMessage(), 500);
         }
     }
 
@@ -282,8 +291,10 @@ class EventController extends Controller
             ];
 
             return $this->successResponse($data, 'Event details retrieved successfully');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Operation failed: ' . $e->getMessage(), 500);
         }
     }
 
@@ -310,8 +321,10 @@ class EventController extends Controller
             $event->delete();
 
             return $this->successResponse(null, 'Event deleted successfully');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Operation failed: ' . $e->getMessage(), 500);
         }
     }
 
@@ -326,8 +339,10 @@ class EventController extends Controller
             $event->save();
 
             return $this->successResponse($event, 'Status updated successfully');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Operation failed: ' . $e->getMessage(), 500);
         }
     }
     public function publicEvents(Request $request)
@@ -417,8 +432,10 @@ class EventController extends Controller
                 'pagination' => $response['pagination'] ?? null,
             ]);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Operation failed: ' . $e->getMessage(), 500);
         }
     }
 }

@@ -21,32 +21,23 @@ class ProfileController extends Controller
     {
         try {
             $user = $request->user();
+            $member = $user->member;
 
-            $member = $user->member; // may be null
-
-            return response()->json([
-                'status' => 200,
-                'message' => 'Profile fetched successfully',
-                'data' => [
-                    'user_id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'phone' => $user->phone,
-
-                    'member_id' => $member->member_id ?? null,
-                    'address' => $member->address ?? null,
-                    'dob' => $member->dob ?? null,
-                    'gender' => $member->gender ?? null,
-                    'image' => isset($member->image)
-                        ? asset($member->image)
-                        : null,
-                    'work' => $member->work ?? null,
-
-                    'profile_completed' => $member ? true : false
-                ]
-            ]);
+            return $this->successResponse([
+                'user_id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'member_id' => $member->member_id ?? null,
+                'address' => $member->address ?? null,
+                'dob' => $member->dob ?? null,
+                'gender' => $member->gender ?? null,
+                'image' => ($member && $member->image) ? asset($member->image) : null,
+                'work' => $member->work ?? null,
+                'profile_completed' => $member ? true : false
+            ], 'Profile fetched successfully');
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Failed to fetch profile: ' . $e->getMessage(), 500);
         }
     }
 
@@ -54,7 +45,7 @@ class ProfileController extends Controller
     {
         try {
             $user = $request->user();
-            $member = $user->member; // may be null
+            $member = $user->member;
 
             $request->validate([
                 'name' => 'required|string|max:255',
@@ -75,6 +66,14 @@ class ProfileController extends Controller
                 'phone' => $request->phone,
             ]);
 
+            $profileData = [
+                'member_id' => $request->member_id,
+                'address' => $request->address,
+                'dob' => $request->dob,
+                'gender' => $request->gender,
+                'work' => $request->work,
+            ];
+
             // Handle Profile Image
             if ($request->hasFile('image')) {
                 // Delete old image if exists
@@ -85,53 +84,37 @@ class ProfileController extends Controller
                 $file = $request->file('image');
                 $filename = $file->hashName();
                 $file->move(public_path('members'), $filename);
-                $imagePath = '/members/' . $filename;
+                $profileData['image'] = '/members/' . $filename;
             }
 
             // Sync Member details
-            $user->member()->updateOrCreate(
+            $member = $user->member()->updateOrCreate(
                 ['user_id' => $user->id],
-                [
-                    'member_id' => $request->member_id,
-                    'address' => $request->address,
-                    'dob' => $request->dob,
-                    'gender' => $request->gender,
-                    'work' => $request->work,
-                    'image' => $imagePath,
-                ]
+                $profileData
             );
 
-            // Re-fetch user with member to get updated data
-            return response()->json([
-                'status' => 200,
-                'message' => 'Profile updated successfully',
-                'data' => [
-                    'user_id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'phone' => $user->phone,
+            // Re-fetch to get fresh state
+            $user->load('member');
+            $member = $user->member;
 
-                    'member_id' => $member->member_id ?? null,
-                    'address' => $member->address ?? null,
-                    'dob' => $member->dob ?? null,
-                    'gender' => $member->gender ?? null,
-                    'image' => isset($member->image)
-                        ? asset($member->image)
-                        : null,
-                    'work' => $member->work ?? null,
+            return $this->successResponse([
+                'user_id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'member_id' => $member->member_id ?? null,
+                'address' => $member->address ?? null,
+                'dob' => $member->dob ?? null,
+                'gender' => $member->gender ?? null,
+                'image' => ($member && $member->image) ? asset($member->image) : null,
+                'work' => $member->work ?? null,
+                'profile_completed' => true
+            ], 'Profile updated successfully');
 
-                    'profile_completed' => $member ? true : false
-                ]
-            ]);
-
-        } catch (ValidationException $e) {
-            return response()->json([
-                'status' => 422,
-                'message' => 'Validation error',
-                'errors' => $e->errors()
-            ], 422);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse('Validation error', 422, $e->errors());
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Failed to update profile: ' . $e->getMessage(), 500);
         }
     }
 
@@ -139,15 +122,11 @@ class ProfileController extends Controller
     {
         try {
             $user = $request->user();
-            $user->update([
-                'status' => 0,
-            ]);
-            return response()->json([
-                'status' => 200,
-                'message' => 'Profile deactivated successfully',
-            ]);
+            $user->update(['status' => 0]);
+
+            return $this->successResponse(null, 'Profile deactivated successfully');
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Failed to deactivate profile: ' . $e->getMessage(), 500);
         }
     }
 }

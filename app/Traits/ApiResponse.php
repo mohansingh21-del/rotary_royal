@@ -21,11 +21,17 @@ trait ApiResponse
     /**
      * Standard error response structure.
      */
-    protected function errorResponse(string $message = 'Error', int $status = 400): JsonResponse
+    protected function errorResponse(string $message = 'Error', int $status = 400, $errors = null): JsonResponse
     {
-        return response()->json([
+        $response = [
             'status' => $status,
             'message' => $message,
-        ], $status);
+        ];
+
+        if ($errors !== null) {
+            $response['errors'] = $errors;
+        }
+
+        return response()->json($response, $status);
     }
 }

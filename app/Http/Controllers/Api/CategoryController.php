@@ -7,6 +7,7 @@ use App\Models\Category;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
 use Exception;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class CategoryController extends Controller
 {
@@ -18,10 +19,58 @@ class CategoryController extends Controller
     public function index(Request $request)
     {
         try {
-            $categories = Category::get();
-            return $this->successResponse($categories, 'Categories retrieved successfully');
+            $limit = $request->input('limit', 10);
+            $page = $request->input('page', 1);
+            $search = $request->input('search', null);
+
+            $query = Category::query();
+
+            if ($search) {
+                $query->where('name', 'like', '%' . $search . '%');
+            }
+
+            if ($limit) {
+                $categories = $query->orderBy('name', 'ASC')
+                    ->paginate($limit, ['*'], 'page', $page);
+
+                $response = [
+                    'data' => $categories->items(),
+                    'pagination' => [
+                        'total' => $categories->total(),
+                        'current_page' => $categories->currentPage(),
+                        'per_page' => $categories->perPage(),
+                        'last_page' => $categories->lastPage(),
+                        'from' => $categories->firstItem(),
+                        'to' => $categories->lastItem(),
+                        'next_page_url' => $categories->nextPageUrl(),
+                        'previous_page_url' => $categories->previousPageUrl(),
+                    ]
+                ];
+            } else {
+                $categories = $query->orderBy('name', 'ASC')->get();
+                $response = [
+                    'data' => $categories,
+                    'pagination' => [
+                        'total' => $categories->count(),
+                        'current_page' => 1,
+                        'per_page' => $categories->count(),
+                        'last_page' => 1,
+                        'from' => $categories->isEmpty() ? 0 : 1,
+                        'to' => $categories->count(),
+                        'next_page_url' => null,
+                        'previous_page_url' => null,
+                    ]
+                ];
+            }
+
+            return response()->json([
+                'status' => 200,
+                'message' => 'Categories retrieved successfully',
+                'data' => $response['data'],
+                'pagination' => $response['pagination'] ?? null,
+            ]);
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Failed to fetch categories: ' . $e->getMessage(), 500);
         }
     }
 
@@ -30,14 +79,14 @@ class CategoryController extends Controller
      */
     public function store(Request $request)
     {
-        $id = $request->input('id');
-
-        $request->validate([
-            'id' => $id ? 'required|exists:categories,id' : 'nullable',
-            'name' => 'required|string|max:255',
-        ]);
-
         try {
+            $id = $request->input('id');
+
+            $request->validate([
+                'id' => $id ? 'required|exists:categories,id' : 'nullable',
+                'name' => 'required|string|max:255',
+            ]);
+
             $category = $id ? Category::findOrFail($id) : new Category();
 
             $category->name = $request->name;
@@ -52,8 +101,12 @@ class CategoryController extends Controller
                 $id ? 'Category updated successfully' : 'Category created successfully',
                 $id ? 200 : 201
             );
+        } catch (ModelNotFoundException $e) {
+            return $this->errorResponse('Category not found', 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse('Validation error', 422, $e->errors());
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Failed to save category: ' . $e->getMessage(), 500);
         }
     }
 
@@ -70,8 +123,12 @@ class CategoryController extends Controller
             }
             $category->delete();
             return $this->successResponse(null, 'Category deleted successfully');
+        } catch (ModelNotFoundException $e) {
+            return $this->errorResponse('Category not found', 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Failed to delete category: ' . $e->getMessage(), 500);
         }
     }
 
@@ -80,8 +137,10 @@ class CategoryController extends Controller
         try {
             $categories = Category::where('is_active', 1)->get();
             return $this->successResponse($categories, 'Categories retrieved successfully');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Failed to fetch public categories: ' . $e->getMessage(), 500);
         }
     }
 
@@ -96,8 +155,12 @@ class CategoryController extends Controller
             $category->save();
 
             return $this->successResponse($category, 'Status updated successfully');
+        } catch (ModelNotFoundException $e) {
+            return $this->errorResponse('Category not found', 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Failed to update status: ' . $e->getMessage(), 500);
         }
     }
 
@@ -106,8 +169,12 @@ class CategoryController extends Controller
         try {
             $category = Category::findOrFail($id);
             return $this->successResponse($category, 'Category retrieved successfully');
+        } catch (ModelNotFoundException $e) {
+            return $this->errorResponse('Category not found', 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Failed to retrieve category: ' . $e->getMessage(), 500);
         }
     }
 }

@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Exception;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class ProjectController extends Controller
 {
@@ -97,8 +98,10 @@ class ProjectController extends Controller
                 'pagination' => $response['pagination'] ?? null,
             ]);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Failed to fetch projects: ' . $e->getMessage(), 500);
         }
     }
 
@@ -120,38 +123,39 @@ class ProjectController extends Controller
      */
     public function store(Request $request)
     {
-        $id = $request->input('id');
-        $project = $id ? Project::findOrFail($id) : new Project();
+        try {
+            $id = $request->input('id');
+            $project = $id ? Project::findOrFail($id) : new Project();
 
-        $rules = [
-            'name' => 'required|string|max:255',
-            'description' => 'required|string',
-            'banner_image' => ($id ? 'nullable' : 'required') . '|image|mimes:jpeg,png,jpg|max:5120|dimensions:ratio=2/1',
-            'start_date' => 'required|date',
-            'end_date' => 'required|date|after_or_equal:start_date',
-            'is_funding_available' => 'boolean',
-            'status' => 'nullable|in:upcoming,ongoing,completed',
-            'gallery_images' => 'nullable|array',
-            'gallery_images.*' => [
-                'nullable',
-                function ($attribute, $value, $fail) {
-                    if ($value instanceof \Illuminate\Http\UploadedFile) {
-                        $validator = \Illuminate\Support\Facades\Validator::make(
-                            ['file' => $value],
-                            ['file' => 'image|dimensions:ratio=1/1']
-                        );
-                        if ($validator->fails()) {
-                            $fail("The gallery image must have an aspect ratio of 1:1.");
+            $rules = [
+                'name' => 'required|string|max:255',
+                'description' => 'required|string',
+                'banner_image' => ($id ? 'nullable' : 'required') . '|image|mimes:jpeg,png,jpg|max:5120|dimensions:ratio=2/1',
+                'start_date' => 'required|date',
+                'end_date' => 'required|date|after_or_equal:start_date',
+                'is_funding_available' => 'boolean',
+                'status' => 'nullable|in:upcoming,ongoing,completed',
+                'gallery_images' => 'nullable|array',
+                'gallery_images.*' => [
+                    'nullable',
+                    function ($attribute, $value, $fail) {
+                        if ($value instanceof \Illuminate\Http\UploadedFile) {
+                            $validator = \Illuminate\Support\Facades\Validator::make(
+                                ['file' => $value],
+                                ['file' => 'image|dimensions:ratio=1/1']
+                            );
+                            if ($validator->fails()) {
+                                $fail("The gallery image must have an aspect ratio of 1:1.");
+                            }
                         }
                     }
-                }
-            ],
-        ];
+                ],
+            ];
 
-        $request->validate($rules);
+            $request->validate($rules);
 
-        DB::beginTransaction();
-        try {
+            DB::beginTransaction();
+
             $project->name = $request->name;
             $project->description = $request->description;
             $project->start_date = $request->start_date;
@@ -182,14 +186,13 @@ class ProjectController extends Controller
 
             $project->save();
 
-            // Handle Gallery Images Syncing (Mixed: paths to keep + new files)
+            // Handle Gallery Images Syncing
             $galleryInput = $request->input('gallery_images', []);
             $pathsToKeep = [];
 
             if (is_array($galleryInput)) {
                 foreach ($galleryInput as $item) {
                     if (is_string($item) && !empty($item)) {
-                        // Extract relative path if a full URL is sent
                         $relative = str_replace(url('/'), '', $item);
                         $pathsToKeep[] = $relative;
                     }
@@ -209,7 +212,6 @@ class ProjectController extends Controller
                 }
             }
 
-            // Handle new file uploads
             if ($request->hasFile('gallery_images')) {
                 $files = $request->file('gallery_images');
                 if (!is_array($files)) {
@@ -232,9 +234,15 @@ class ProjectController extends Controller
 
             return $this->successResponse($this->formatProject($project->load('images')), $id ? 'Project updated successfully' : 'Project created successfully', $id ? 200 : 201);
 
+        } catch (ModelNotFoundException $e) {
+            DB::rollBack();
+            return $this->errorResponse('Project not found', 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return $this->errorResponse('Validation error', 422, $e->errors());
         } catch (Exception $e) {
             DB::rollBack();
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Failed to save project: ' . $e->getMessage(), 500);
         }
     }
 
@@ -244,10 +252,7 @@ class ProjectController extends Controller
     public function show($id)
     {
         try {
-            $project = Project::with(['images', 'donations'])->find($id);
-            if (!$project) {
-                return $this->errorResponse('Project not found', 404);
-            }
+            $project = Project::with(['images', 'donations'])->findOrFail($id);
 
             $totalFunding = $project->donations->sum('amount');
 
@@ -277,8 +282,12 @@ class ProjectController extends Controller
             ];
 
             return $this->successResponse($data, 'Project details retrieved successfully');
+        } catch (ModelNotFoundException $e) {
+            return $this->errorResponse('Project not found', 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Failed to retrieve project details: ' . $e->getMessage(), 500);
         }
     }
 
@@ -306,8 +315,12 @@ class ProjectController extends Controller
             $project->delete();
 
             return $this->successResponse(null, 'Project deleted successfully');
+        } catch (ModelNotFoundException $e) {
+            return $this->errorResponse('Project not found', 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Failed to delete project: ' . $e->getMessage(), 500);
         }
     }
 
@@ -322,8 +335,12 @@ class ProjectController extends Controller
             $project->save();
 
             return $this->successResponse($project, 'Status updated successfully');
+        } catch (ModelNotFoundException $e) {
+            return $this->errorResponse('Project not found', 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Failed to update status: ' . $e->getMessage(), 500);
         }
     }
 
@@ -395,8 +412,10 @@ class ProjectController extends Controller
                 'pagination' => $response['pagination'] ?? null,
             ]);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Failed to fetch public projects: ' . $e->getMessage(), 500);
         }
     }
 

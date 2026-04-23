@@ -24,10 +24,36 @@ class DonationController extends Controller
             $page = $request->input('page', 1);
             $search = $request->input('search', null);
 
-            $query = Donation::query();
+            $query = Donation::with('project');
 
             if ($search) {
-                $query->where('donor_name', 'like', '%' . $search . '%');
+                $query->where(function ($q) use ($search) {
+                    $q->where('donor_name', 'like', '%' . $search . '%')
+                        ->orWhere('amount', 'like', '%' . $search . '%')
+                        ->orWhereHas('project', function ($pq) use ($search) {
+                            $pq->where('name', 'like', '%' . $search . '%');
+                        });
+
+                    if (stripos('Rotary Club', $search) !== false) {
+                        $q->orWhereNull('project_id');
+                    }
+                });
+            }
+
+            if ($request->has('project_id') && $request->project_id) {
+                $query->where('project_id', $request->project_id);
+            }
+
+            if ($request->has('amount') && $request->amount) {
+                $query->where('amount', $request->amount);
+            }
+
+            if ($request->has('start_date') && $request->start_date) {
+                $query->whereDate('date', '>=', $request->start_date);
+            }
+
+            if ($request->has('end_date') && $request->end_date) {
+                $query->whereDate('date', '<=', $request->end_date);
             }
 
             if ($limit) {
@@ -98,6 +124,8 @@ class DonationController extends Controller
                 'pagination' => $response['pagination'] ?? null,
             ]);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
@@ -108,34 +136,40 @@ class DonationController extends Controller
      */
     public function store(Request $request)
     {
-        $request->validate([
-            'project_id' => 'nullable|exists:projects,id',
-            'donor_name' => 'required|string|max:255',
-            'mobile_no' => 'required|string|max:20',
-            'amount' => 'required|numeric|min:0',
-            'payment_receipt' => 'required|image|mimes:jpeg,png,jpg,gif,svg,webp|max:5120',
-        ]);
+        try {
+            $request->validate([
+                'project_id' => 'nullable|exists:projects,id',
+                'donor_name' => 'required|string|max:255',
+                'mobile_no' => 'required|string|max:20',
+                'amount' => 'required|numeric|min:0',
+                'payment_receipt' => 'required|image|mimes:jpeg,png,jpg,gif,svg,webp|max:5120',
+            ]);
 
-        $paymentReceiptPath = null;
-        if ($request->hasFile('payment_receipt')) {
-            $file = $request->file('payment_receipt');
-            $filename = time() . '_' . $file->getClientOriginalName();
-            $file->move(public_path('donations'), $filename);
-            $paymentReceiptPath = '/donations/' . $filename;
+            $paymentReceiptPath = null;
+            if ($request->hasFile('payment_receipt')) {
+                $file = $request->file('payment_receipt');
+                $filename = time() . '_' . $file->getClientOriginalName();
+                $file->move(public_path('donations'), $filename);
+                $paymentReceiptPath = '/donations/' . $filename;
+            }
+
+            $donation = Donation::create([
+                'project_id' => $request->project_id,
+                'donor_name' => $request->donor_name,
+                'mobile_no' => $request->mobile_no,
+                'amount' => $request->amount,
+                'date' => $request->date ?? now()->toDateString(),
+                'foundation_name' => $request->foundation_name,
+                'is_marquee' => true,
+                'payment_receipt' => $paymentReceiptPath,
+            ]);
+
+            return $this->successResponse($donation, 'Donation recorded successfully', 201);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse('Validation error', 422, $e->errors());
+        } catch (Exception $e) {
+            return $this->errorResponse('Failed to record donation: ' . $e->getMessage(), 500);
         }
-
-        $donation = Donation::create([
-            'project_id' => $request->project_id,
-            'donor_name' => $request->donor_name,
-            'mobile_no' => $request->mobile_no,
-            'amount' => $request->amount,
-            'date' => $request->date ?? now()->toDateString(),
-            'foundation_name' => $request->foundation_name,
-            'is_marquee' => true,
-            'payment_receipt' => $paymentReceiptPath,
-        ]);
-
-        return $this->successResponse($donation, 'Donation recorded successfully', 201);
     }
 
     /**
@@ -152,6 +186,8 @@ class DonationController extends Controller
                 'message' => 'Marquee status updated successfully',
                 'data' => $donation,
             ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
@@ -179,6 +215,8 @@ class DonationController extends Controller
                 'message' => 'Marquee message stored successfully',
                 'data' => $marqueeMessage,
             ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
@@ -193,6 +231,8 @@ class DonationController extends Controller
                 'message' => 'Marquee message retrieved successfully',
                 'data' => $marqueeMessage,
             ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
@@ -208,13 +248,14 @@ class DonationController extends Controller
                 ->toArray();
 
             $marqueeList = [];
-            if ($marqueeMessage && $marqueeMessage->marquee_message) {
-                $marqueeList[] = $marqueeMessage->marquee_message;
-            }
+            $prefix = ($marqueeMessage && $marqueeMessage->marquee_message) ? $marqueeMessage->marquee_message : "";
 
             if (!empty($donors)) {
-                $donorsText = "Special thanks to our donors: " . implode(', ', $donors);
-                $marqueeList[] = $donorsText;
+                foreach ($donors as $donor) {
+                    $marqueeList[] = trim($prefix . " " . $donor);
+                }
+            } elseif ($prefix) {
+                $marqueeList[] = $prefix;
             }
 
             return response()->json([
@@ -226,6 +267,8 @@ class DonationController extends Controller
                     'combined_list' => $marqueeList,
                 ],
             ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
@@ -244,6 +287,8 @@ class DonationController extends Controller
                 'message' => 'Donors for the last 7 days retrieved successfully',
                 'data' => $donors,
             ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }

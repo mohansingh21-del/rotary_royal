@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
+use Exception;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class NotificationController extends Controller
 {
@@ -15,9 +17,14 @@ class NotificationController extends Controller
      */
     public function index(Request $request)
     {
-        $notifications = $request->user()->unreadNotifications;
-
-        return $this->successResponse($notifications, 'Notifications retrieved successfully');
+        try {
+            $notifications = $request->user()->unreadNotifications;
+            return $this->successResponse($notifications, 'Notifications retrieved successfully');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
+        } catch (Exception $e) {
+            return $this->errorResponse('Failed to fetch notifications: ' . $e->getMessage(), 500);
+        }
     }
 
     /**
@@ -25,10 +32,18 @@ class NotificationController extends Controller
      */
     public function markAsRead(Request $request, $id)
     {
-        $notification = $request->user()->notifications()->findOrFail($id);
-        $notification->markAsRead();
+        try {
+            $notification = $request->user()->notifications()->findOrFail($id);
+            $notification->markAsRead();
 
-        return $this->successResponse(null, 'Notification marked as read');
+            return $this->successResponse(null, 'Notification marked as read');
+        } catch (ModelNotFoundException $e) {
+            return $this->errorResponse('Notification not found', 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
+        } catch (Exception $e) {
+            return $this->errorResponse('Failed to mark notification as read: ' . $e->getMessage(), 500);
+        }
     }
 
     /**
@@ -36,8 +51,13 @@ class NotificationController extends Controller
      */
     public function markAllAsRead(Request $request)
     {
-        $request->user()->unreadNotifications->markAsRead();
-
-        return $this->successResponse(null, 'All notifications marked as read');
+        try {
+            $request->user()->unreadNotifications->markAsRead();
+            return $this->successResponse(null, 'All notifications marked as read');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
+        } catch (Exception $e) {
+            return $this->errorResponse('Failed to mark all notifications as read: ' . $e->getMessage(), 500);
+        }
     }
 }

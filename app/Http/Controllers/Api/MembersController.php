@@ -13,6 +13,7 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Exception;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class MembersController extends Controller
 {
@@ -107,8 +108,10 @@ class MembersController extends Controller
                 'pagination' => $response['pagination'] ?? null,
             ]);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Failed to fetch members: ' . $e->getMessage(), 500);
         }
     }
 
@@ -129,16 +132,21 @@ class MembersController extends Controller
                 'message' => 'Member details retrieved successfully',
                 'data' => $member,
             ]);
+        } catch (ModelNotFoundException $e) {
+            return $this->errorResponse('Member not found', 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Failed to retrieve member details: ' . $e->getMessage(), 500);
         }
     }
 
     public function store(Request $request)
     {
-        $id = $request->input('id');
-        $member = $id ? Members::with('user')->findOrFail($id) : new Members();
-        $user = $id ? $member->user : new User();
+        try {
+            $id = $request->input('id');
+            $member = $id ? Members::with('user')->findOrFail($id) : new Members();
+            $user = $id ? $member->user : new User();
 
         $rules = [
             'name' => 'required|string|max:255',
@@ -203,9 +211,15 @@ class MembersController extends Controller
 
             return $this->successResponse($user, $id ? 'Member updated successfully' : 'Member created successfully', $id ? 200 : 201);
 
+        } catch (ModelNotFoundException $e) {
+            DB::rollBack();
+            return $this->errorResponse('Member not found', 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            DB::rollBack();
+            return $this->errorResponse('Validation error', 422, $e->errors());
         } catch (Exception $e) {
             DB::rollBack();
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Failed to save member: ' . $e->getMessage(), 500);
         }
     }
 
@@ -290,8 +304,10 @@ class MembersController extends Controller
                 'pagination' => $response['pagination'] ?? null,
             ]);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Failed to fetch non-members: ' . $e->getMessage(), 500);
         }
     }
 
@@ -312,8 +328,10 @@ class MembersController extends Controller
             $user->save();
 
             return $this->successResponse($user, 'Status updated successfully');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Operation failed: ' . $e->getMessage(), 500);
         }
     }
 
@@ -325,8 +343,10 @@ class MembersController extends Controller
             $user->save();
 
             return $this->successResponse($user, 'Status updated successfully');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Operation failed: ' . $e->getMessage(), 500);
         }
     }
 }

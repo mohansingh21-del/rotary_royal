@@ -22,6 +22,8 @@ class UserController extends Controller
     public function activeMembers(Request $request)
     {
         try {
+            $limit = $request->input('limit', null);
+            $page = $request->input('page', 1);
             $search = $request->input('search');
 
             $query = User::with('member')
@@ -40,26 +42,60 @@ class UserController extends Controller
                 });
             }
 
-            $users = $query->orderBy('id', 'DESC')->get();
+            $query->orderBy('id', 'DESC');
 
-            $data = $users->map(function ($user) {
-                return [
-                    'id' => $user->member->id,
-                    'user_id' => $user->id,
-                    'name' => $user->name,
-                    'email' => $user->email,
-                    'phone' => $user->phone,
-                    'status' => $user->status,
-                    'image' => $user->member->image ? asset($user->member->image) : null,
-                    'date_of_joining' => $user->member->date_of_joining,
-                    'member_id' => $user->member->member_id,
-                ];
-            });
+            if ($limit) {
+                $users = $query->paginate($limit, ['*'], 'page', $page);
+                $items = $users->getCollection()->map(function ($user) {
+                    return $this->formatUser($user);
+                });
 
-            return $this->successResponse($data, 'Active members retrieved successfully');
+                return response()->json([
+                    'status' => 200,
+                    'message' => 'Active members retrieved successfully',
+                    'data' => $items,
+                    'pagination' => [
+                        'total' => $users->total(),
+                        'current_page' => $users->currentPage(),
+                        'per_page' => $users->perPage(),
+                        'last_page' => $users->lastPage(),
+                        'from' => $users->firstItem(),
+                        'to' => $users->lastItem(),
+                        'next_page_url' => $users->nextPageUrl(),
+                        'previous_page_url' => $users->previousPageUrl(),
+                    ]
+                ]);
+            } else {
+                $users = $query->get();
+                $data = $users->map(function ($user) {
+                    return $this->formatUser($user);
+                });
+
+                return $this->successResponse($data, 'Active members retrieved successfully');
+            }
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
+    }
+
+    /**
+     * Format user data for consistent API response.
+     */
+    private function formatUser($user)
+    {
+        return [
+            'id' => $user->member->id,
+            'user_id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'phone' => $user->phone,
+            'status' => $user->status,
+            'image' => $user->member->image ? asset($user->member->image) : null,
+            'date_of_joining' => $user->member->date_of_joining,
+            'member_id' => $user->member->member_id,
+        ];
     }
 
 
@@ -69,38 +105,47 @@ class UserController extends Controller
      */
     public function store(Request $request)
     {
-        $rules = [
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email' . ($request->id ? ',' . $request->id : ''),
-            'phone' => 'required|regex:/^[0-9]{10}$/|unique:users,phone' . ($request->id ? ',' . $request->id : ''),
-        ];
+        try {
+            $rules = [
+                'name' => 'required|string|max:255',
+                'email' => 'required|email|unique:users,email' . ($request->id ? ',' . $request->id : ''),
+                'phone' => 'required|regex:/^[0-9]{10}$/|unique:users,phone' . ($request->id ? ',' . $request->id : ''),
+            ];
 
-        $request->validate($rules);
+            $request->validate($rules);
 
-        $user = $request->id ? User::findOrFail($request->id) : new User();
+            $user = $request->id ? User::findOrFail($request->id) : new User();
 
-        $user->name = $request->name;
-        $user->email = $request->email;
-        $user->phone = $request->phone;
-        $user->password = Hash::make(Str::random(16)); // Randomized unusable password
-        $user->role = 'Member';
-        $user->status = 1;
-        $user->save();
+            $user->name = $request->name;
+            $user->email = $request->email;
+            $user->phone = $request->phone;
+            $user->password = Hash::make(Str::random(16)); // Randomized unusable password
+            $user->role = 'Member';
+            $user->status = 1;
+            $user->save();
 
-        // Create Member Profile if it doesn't exist (for manual management)
-        if (!$user->member) {
-            $lastMember = Members::latest('id')->first();
-            $nextNum = $lastMember ? (int) substr($lastMember->member_id, 5) + 1 : 11; // Start from 11 if no members
-            $memberId = 'M' . date('Y') . str_pad($nextNum, 2, '0', STR_PAD_LEFT);
+            // Create Member Profile if it doesn't exist (for manual management)
+            if (!$user->member) {
+                $lastMember = Members::latest('id')->first();
+                $nextNum = $lastMember ? (int) substr($lastMember->member_id, 5) + 1 : 11; // Start from 11 if no members
+                $memberId = 'M' . date('Y') . str_pad($nextNum, 2, '0', STR_PAD_LEFT);
 
-            Members::create([
-                'user_id' => $user->id,
-                'member_id' => $memberId,
-                'status' => 1,
-            ]);
+                Members::create([
+                    'user_id' => $user->id,
+                    'member_id' => $memberId,
+                    'status' => 1,
+                ]);
+            }
+
+            return $this->successResponse($user, 'Member created successfully', 201);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return $this->errorResponse('User not found', 404);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->errorResponse('Validation error', 422, $e->errors());
+        } catch (Exception $e) {
+            return $this->errorResponse('Failed to create member: ' . $e->getMessage(), 500);
         }
-
-        return $this->successResponse($user, 'Member created successfully', 201);
     }
 
 
