@@ -45,7 +45,9 @@ class AuthController extends Controller
             'token' => $token,
             'token_type' => 'Bearer',
             'user' => [
-                'id' => $user->id,
+                'user_id' => $user->id,
+                'member_id' => $user->member?->member_id,
+                'image_url' => $user->member?->image ? asset($user->member->image) : null,
                 'name' => $user->name,
                 'email' => $user->email,
                 'role' => $user->role,
@@ -327,6 +329,9 @@ class AuthController extends Controller
             'message' => 'Login successful',
             'token' => $token,
             'user' => [
+                'user_id' => $user->id,
+                'member_id' => $user->member?->member_id,
+                'image_url' => $user->member?->image ? asset($user->member->image) : null,
                 'name' => $user->name,
                 'email' => $user->email,
                 'phone' => $user->phone,

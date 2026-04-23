@@ -143,8 +143,7 @@ class MembersController extends Controller
 
     public function store(Request $request)
     {
-        try {
-            $id = $request->input('id');
+        $id = $request->input('id');
             $member = $id ? Members::with('user')->findOrFail($id) : new Members();
             $user = $id ? $member->user : new User();
 

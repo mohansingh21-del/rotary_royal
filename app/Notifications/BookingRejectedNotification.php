@@ -34,7 +34,7 @@ class BookingRejectedNotification extends Notification
      */
     public function via($notifiable)
     {
-        return ['mail'];
+        return ['mail', 'database'];
     }
 
     /**
@@ -53,5 +53,16 @@ class BookingRejectedNotification extends Notification
             ->line('If you have any questions, please contact our support team.')
             // ->action('View My Bookings', url('/bookings'))
             ->line('Thank you for using Rotary Royals Emergency Bank.');
+    }
+
+    public function toArray($notifiable)
+    {
+        return [
+            'booking_id' => $this->booking->id,
+            'asset_name' => $this->booking->asset->name,
+            'reason' => $this->reason,
+            'message' => 'Your booking for ' . $this->booking->asset->name . ' has been rejected.',
+            'type' => 'booking_rejected',
+        ];
     }
 }

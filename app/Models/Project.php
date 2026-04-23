@@ -17,7 +17,6 @@ class Project extends Model
         'start_date',
         'end_date',
         'is_funding_available',
-        'status',
         'is_active',
     ];
 

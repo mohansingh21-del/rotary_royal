@@ -5,9 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Event;
 use App\Models\EventImage;
+use App\Models\User;
+use App\Notifications\EventAdminNotification;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Exception;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
@@ -243,6 +246,11 @@ class EventController extends Controller
 
             DB::commit();
 
+            Notification::send(
+                User::whereIn('role', ['Member', 'Non-Member'])->where('status', 1)->get(),
+                new EventAdminNotification($event->fresh(), $id ? 'updated' : 'created')
+            );
+
             return $this->successResponse(
                 $this->formatEvent($event->load('images')),
                 $id ? 'Event updated successfully' : 'Event created successfully',
@@ -337,6 +345,11 @@ class EventController extends Controller
             $event = Event::findOrFail($id);
             $event->is_active = ($event->is_active == 1) ? 0 : 1;
             $event->save();
+
+            Notification::send(
+                User::whereIn('role', ['Member', 'Non-Member'])->where('status', 1)->get(),
+                new EventAdminNotification($event, $event->is_active ? 'activated' : 'deactivated')
+            );
 
             return $this->successResponse($event, 'Status updated successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {

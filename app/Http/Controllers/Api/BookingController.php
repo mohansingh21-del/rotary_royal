@@ -70,23 +70,7 @@ class BookingController extends Controller
                 $bookings = $query->orderBy('created_at', 'DESC')
                     ->paginate($limit, ['*'], 'page', $page);
                 $bookings->getCollection()->transform(function ($booking) {
-                    return [
-                        'id' => $booking->id,
-                        'asset_id' => $booking->asset_id,
-                        'assets_name' => $booking->asset?->name,
-                        'price' => $booking->asset?->price,
-                        'user_name' => $booking->user_name,
-                        'user_phone' => $booking->user_phone,
-                        'user_email' => $booking->user_email,
-                        'start_date' => $booking->start_date,
-                        'end_date' => $booking->end_date,
-                        'id_number' => $booking->id_number,
-                        'id_image_path' => $booking->id_image_path,
-                        'payment_image' => $booking->payment_image,
-                        'reference' => $booking->referrer?->name ?? $booking->reference,
-                        'status' => $booking->status,
-                        'buffer_time' => $booking->buffer_time,
-                    ];
+                    return $this->formatBooking($booking);
                 });
 
                 $response = [
@@ -105,23 +89,7 @@ class BookingController extends Controller
             } else {
                 $bookings = $query->orderBy('created_at', 'DESC')->get();
                 $bookings->transform(function ($booking) {
-                    return [
-                        'id' => $booking->id,
-                        'asset_id' => $booking->asset_id,
-                        'assets_name' => $booking->asset?->name,
-                        'price' => $booking->asset?->price,
-                        'user_name' => $booking->user_name,
-                        'user_phone' => $booking->user_phone,
-                        'user_email' => $booking->user_email,
-                        'start_date' => $booking->start_date,
-                        'end_date' => $booking->end_date,
-                        'id_number' => $booking->id_number,
-                        'id_image_path' => $booking->id_image_path,
-                        'payment_image' => $booking->payment_image,
-                        'reference' => $booking->referrer?->name ?? $booking->reference,
-                        'status' => $booking->status,
-                        'buffer_time' => $booking->buffer_time,
-                    ];
+                    return $this->formatBooking($booking);
                 });
                 $response = [
                     'data' => $bookings,
@@ -225,9 +193,7 @@ class BookingController extends Controller
             }
 
             // Auto-registration logic
-            $user = User::where('email', $request->user_email)
-                ->orWhere('phone', $request->user_phone)
-                ->first();
+            $user = User::where('phone', $request->user_phone)->first();
 
             if (!$user) {
                 $user = User::create([
@@ -244,7 +210,7 @@ class BookingController extends Controller
             $booking = Booking::create(array_merge($request->except(['payment_image', 'id_image_path']), [
                 'id' => $newId,
                 'user_id' => $user->id,
-                'status' => 'Approved',
+                'status' => 'Pending',
                 'buffer_time' => $asset->buffer_time,
                 'payment_image' => $paymentImagePath,
                 'id_image_path' => $idImagePath,
@@ -254,15 +220,7 @@ class BookingController extends Controller
             $admins = User::where('role', 'Super Admin')->get();
             Notification::send($admins, new NewBookingAdminNotification($booking));
 
-            // Notify User
-            Notification::route('mail', $booking->user_email)->notify(new BookingConfirmedNotification($booking));
-
-            // Keep left_quantity in sync
-            if ($asset->left_quantity > 0) {
-                $asset->decrement('left_quantity');
-            }
-
-            return $this->successResponse($booking, 'Your booking is confirmed. We’ve sent the details to your email.', 201);
+            return $this->successResponse($booking, 'Your booking request has been submitted successfully.', 201);
         } catch (ModelNotFoundException $e) {
             return $this->errorResponse('Asset not found', 404);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -285,6 +243,7 @@ class BookingController extends Controller
 
             $booking = Booking::findOrFail($request->id);
 
+            $wasApproved = $booking->status === 'Approved';
             $booking->update([
                 'status' => 'Rejected',
                 'rejection_reason' => $request->reason,
@@ -292,13 +251,17 @@ class BookingController extends Controller
 
             // Restore left_quantity for this asset
             $rejectedAsset = Asset::find($booking->asset_id);
-            if ($rejectedAsset) {
+            if ($wasApproved && $rejectedAsset) {
                 $rejectedAsset->left_quantity = min($rejectedAsset->quantity, $rejectedAsset->left_quantity + 1);
                 $rejectedAsset->saveQuietly();
             }
 
             // Notify User (including guests)
-            Notification::route('mail', $booking->user_email)->notify(new BookingRejectedNotification($booking, $request->reason));
+            if ($booking->user) {
+                $booking->user->notify(new BookingRejectedNotification($booking, $request->reason));
+            } else {
+                Notification::route('mail', $booking->user_email)->notify(new BookingRejectedNotification($booking, $request->reason));
+            }
 
             return $this->successResponse($booking, 'Booking rejected successfully.');
         } catch (ModelNotFoundException $e) {
@@ -319,7 +282,30 @@ class BookingController extends Controller
             'status' => 'required|in:Approved,Rejected',
         ]);
 
+        $previousStatus = $booking->status;
         $booking->update(['status' => $request->status]);
+
+        $asset = Asset::find($booking->asset_id);
+        if ($asset) {
+            if ($request->status === 'Approved' && $previousStatus !== 'Approved' && $asset->left_quantity > 0) {
+                $asset->decrement('left_quantity');
+            }
+
+            if ($request->status === 'Rejected' && $previousStatus === 'Approved') {
+                $asset->left_quantity = min($asset->quantity, $asset->left_quantity + 1);
+                $asset->saveQuietly();
+            }
+        }
+
+        if ($booking->user) {
+            if ($request->status === 'Approved') {
+                $booking->user->notify(new BookingConfirmedNotification($booking->load('asset')));
+            }
+
+            if ($request->status === 'Rejected') {
+                $booking->user->notify(new BookingRejectedNotification($booking->load('asset'), 'Booking was rejected by admin.'));
+            }
+        }
 
         return $this->successResponse($booking, 'Booking status updated successfully');
     }
@@ -331,42 +317,116 @@ class BookingController extends Controller
     {
         try {
             $user = $request->user();
-            $bookings = Booking::with(['asset', 'referrer'])
-                ->where('user_id', $user->id)
-                ->orderBy('created_at', 'DESC')
-                ->get();
+            $limit = $request->input('limit', 10);
+            $page = $request->input('page', 1);
+            $search = $request->input('search', null);
 
-            $formattedBookings = $bookings->map(function ($booking) {
-                return [
-                    'id' => $booking->id,
-                    'asset_id' => $booking->asset_id,
-                    'assets_name' => $booking->asset?->name,
-                    'price' => $booking->asset?->price,
-                    'user_name' => $booking->user_name,
-                    'user_phone' => $booking->user_phone,
-                    'user_email' => $booking->user_email,
-                    'start_date' => $booking->start_date,
-                    'end_date' => $booking->end_date,
-                    'id_number' => $booking->id_number,
-                    'id_image_path' => $booking->id_image_path,
-                    'payment_image' => $booking->payment_image,
-                    'reference' => $booking->referrer?->name ?? $booking->reference,
-                    'status' => $booking->status,
-                    'buffer_time' => $booking->buffer_time,
-                    'rejection_reason' => $booking->rejection_reason,
+            $query = Booking::with(['asset', 'referrer'])
+                ->where('user_id', $user->id);
+
+            if ($search) {
+                $query->whereHas('asset', function ($q) use ($search) {
+                    $q->where('name', 'like', '%' . $search . '%');
+                });
+            }
+
+            if ($limit) {
+                $bookings = $query->orderBy('created_at', 'DESC')
+                    ->paginate($limit, ['*'], 'page', $page);
+
+                $formattedItems = collect($bookings->items())->map(function ($booking) {
+                    return $this->formatBooking($booking);
+                });
+
+                $response = [
+                    'data' => $formattedItems,
+                    'pagination' => [
+                        'total' => $bookings->total(),
+                        'current_page' => $bookings->currentPage(),
+                        'per_page' => $bookings->perPage(),
+                        'last_page' => $bookings->lastPage(),
+                        'from' => $bookings->firstItem(),
+                        'to' => $bookings->lastItem(),
+                        'next_page_url' => $bookings->nextPageUrl(),
+                        'previous_page_url' => $bookings->previousPageUrl(),
+                    ]
                 ];
-            });
+            } else {
+                $bookings = $query->orderBy('created_at', 'DESC')->get();
+                $formattedItems = $bookings->map(function ($booking) {
+                    return $this->formatBooking($booking);
+                });
+                $response = [
+                    'data' => $formattedItems,
+                    'pagination' => [
+                        'total' => $bookings->count(),
+                        'current_page' => 1,
+                        'per_page' => $bookings->count(),
+                        'last_page' => 1,
+                        'from' => $bookings->isEmpty() ? 0 : 1,
+                        'to' => $bookings->count(),
+                        'next_page_url' => null,
+                        'previous_page_url' => null,
+                    ]
+                ];
+            }
 
             return response()->json([
                 'status' => 200,
                 'message' => 'Your bookings retrieved successfully',
-                'data' => $formattedBookings,
+                'data' => $response['data'],
+                'pagination' => $response['pagination'] ?? null,
             ]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
-            return $this->errorResponse($e->getMessage(), 500);
+            return $this->errorResponse('Failed to fetch bookings: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Helper to format booking data consistently.
+     */
+    private function formatBooking($booking)
+    {
+        return [
+            'id' => $booking->id,
+            'asset_id' => $booking->asset_id,
+            'assets_name' => $booking->asset?->name,
+            'assets_image' => $booking->asset?->image ? asset($booking->asset->image) : null,
+            'assets_is_active' => $booking->asset?->status,
+            'price' => $booking->asset?->price,
+            'user_id' => $booking->user_id,
+            'user_name' => $booking->user_name,
+            'user_phone' => $booking->user_phone,
+            'user_email' => $booking->user_email,
+            'start_date' => $booking->start_date,
+            'end_date' => $booking->end_date,
+            'id_number' => $booking->id_number,
+            'id_image_path' => $booking->id_image_path ? asset($booking->id_image_path) : null,
+            'payment_image' => $booking->payment_image ? asset($booking->payment_image) : null,
+            'reference' => $booking->referrer?->name ?? $booking->reference,
+            'status' => $booking->status,
+            'buffer_time' => $booking->buffer_time,
+            'rejection_reason' => $booking->rejection_reason,
+            'created_at' => $booking->created_at,
+        ];
+    }
+
+    public function showBooking($id)
+    {
+        try {
+            $user = request()->user();
+            $booking = Booking::with(['asset', 'referrer'])
+                ->where('user_id', $user->id)
+                ->findOrFail($id);
+
+            return $this->successResponse($this->formatBooking($booking), 'Booking details retrieved successfully');
+        } catch (ModelNotFoundException $e) {
+            return $this->errorResponse('Booking not found or access denied', 404);
+        } catch (Exception $e) {
+            return $this->errorResponse('Failed to fetch booking details: ' . $e->getMessage(), 500);
         }
     }
 }

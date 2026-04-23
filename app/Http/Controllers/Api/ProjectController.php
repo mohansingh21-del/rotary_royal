@@ -5,10 +5,13 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Project;
 use App\Models\ProjectImage;
+use App\Models\User;
+use App\Notifications\ProjectAdminNotification;
 use App\Traits\ApiResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Notification;
 use Exception;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
@@ -32,7 +35,7 @@ class ProjectController extends Controller
             $query = Project::with('images');
 
             if ($status) {
-                $query->where('status', $status);
+                $this->applyStatusFilter($query, $status);
             }
 
             if ($from_date) {
@@ -110,12 +113,65 @@ class ProjectController extends Controller
      */
     private function formatProject($project)
     {
-        $project->banner_image = $project->banner_image ? asset($project->banner_image) : null;
-        $project->images->transform(function ($image) {
-            $image->image_path = asset($image->image_path);
-            return $image;
-        });
-        return $project;
+        return [
+            'id' => $project->id,
+            'name' => $project->name,
+            'description' => $project->description,
+            'banner_image' => $project->banner_image ? asset($project->banner_image) : null,
+            'start_date' => $project->start_date,
+            'end_date' => $project->end_date,
+            'status' => $this->resolveProjectStatus($project),
+            'is_active' => $project->is_active,
+            'is_funding_available' => $project->is_funding_available,
+            'created_at' => $project->created_at,
+            'updated_at' => $project->updated_at,
+            'images' => $project->images->map(function ($image) {
+                return [
+                    'id' => $image->id,
+                    'project_id' => $image->project_id,
+                    'image_path' => asset($image->image_path),
+                    'created_at' => $image->created_at,
+                    'updated_at' => $image->updated_at,
+                ];
+            })->values(),
+        ];
+    }
+
+    private function resolveProjectStatus(Project $project): string
+    {
+        $today = Carbon::today();
+        $startDate = $project->start_date instanceof Carbon ? $project->start_date->copy()->startOfDay() : Carbon::parse($project->start_date)->startOfDay();
+        $endDate = $project->end_date instanceof Carbon ? $project->end_date->copy()->endOfDay() : Carbon::parse($project->end_date)->endOfDay();
+
+        if ($today->lt($startDate)) {
+            return 'upcoming';
+        }
+
+        if ($today->gt($endDate)) {
+            return 'completed';
+        }
+
+        return 'ongoing';
+    }
+
+    private function applyStatusFilter($query, string $status): void
+    {
+        $today = Carbon::today()->toDateString();
+
+        if ($status === 'upcoming') {
+            $query->whereDate('start_date', '>', $today);
+            return;
+        }
+
+        if ($status === 'completed') {
+            $query->whereDate('end_date', '<', $today);
+            return;
+        }
+
+        if ($status === 'ongoing') {
+            $query->whereDate('start_date', '<=', $today)
+                ->whereDate('end_date', '>=', $today);
+        }
     }
 
     /**
@@ -134,7 +190,6 @@ class ProjectController extends Controller
                 'start_date' => 'required|date',
                 'end_date' => 'required|date|after_or_equal:start_date',
                 'is_funding_available' => 'boolean',
-                'status' => 'nullable|in:upcoming,ongoing,completed',
                 'gallery_images' => 'nullable|array',
                 'gallery_images.*' => [
                     'nullable',
@@ -162,12 +217,6 @@ class ProjectController extends Controller
             $project->end_date = $request->end_date;
             $project->is_funding_available = $request->boolean('is_funding_available', false);
             $project->is_active = $request->input('is_active', 1) ? 1 : 0;
-
-            if (now() < $request->start_date) {
-                $project->status = 'upcoming';
-            } else {
-                $project->status = 'ongoing';
-            }
 
             if (!$id) {
                 $project->is_active = 1;
@@ -232,6 +281,11 @@ class ProjectController extends Controller
 
             DB::commit();
 
+            Notification::send(
+                User::whereIn('role', ['Member', 'Non-Member'])->where('status', 1)->get(),
+                new ProjectAdminNotification($project->fresh(), $id ? 'updated' : 'created')
+            );
+
             return $this->successResponse($this->formatProject($project->load('images')), $id ? 'Project updated successfully' : 'Project created successfully', $id ? 200 : 201);
 
         } catch (ModelNotFoundException $e) {
@@ -271,7 +325,7 @@ class ProjectController extends Controller
                 'banner_image' => $project->banner_image ? asset($project->banner_image) : null,
                 'start_date' => $project->start_date,
                 'end_date' => $project->end_date,
-                'status' => $project->status,
+                'status' => $this->resolveProjectStatus($project),
                 'is_active' => $project->is_active,
                 'is_funding_available' => $project->is_funding_available,
                 'total_funding' => $totalFunding,
@@ -334,7 +388,12 @@ class ProjectController extends Controller
             $project->is_active = ($project->is_active == 1) ? 0 : 1;
             $project->save();
 
-            return $this->successResponse($project, 'Status updated successfully');
+            Notification::send(
+                User::whereIn('role', ['Member', 'Non-Member'])->where('status', 1)->get(),
+                new ProjectAdminNotification($project, $project->is_active ? 'activated' : 'deactivated')
+            );
+
+            return $this->successResponse($this->formatProject($project->load('images')), 'Status updated successfully');
         } catch (ModelNotFoundException $e) {
             return $this->errorResponse('Project not found', 404);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -355,7 +414,7 @@ class ProjectController extends Controller
             $query = Project::with('images')->where('is_active', 1);
 
             if ($status) {
-                $query->where('status', $status);
+                $this->applyStatusFilter($query, $status);
             }
 
             if ($search) {

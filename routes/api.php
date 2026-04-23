@@ -48,8 +48,8 @@ Route::prefix('v1')->group(function () {
     Route::get('recent-donors', [DonationController::class, 'getDonors']);
 
     // --- Public Interaction Routes ---
-    Route::post('bookings', [BookingController::class, 'store']); // Public Booking Creator (Guest Friendly)
-    Route::post('donations', [DonationController::class, 'store']); // Public Donation Creator
+    Route::post('bookings', [BookingController::class, 'store']); 
+    Route::post('donations', [DonationController::class, 'store']); 
 
     // --- Protected Admin Routes ---
     Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(function () {
@@ -146,6 +146,15 @@ Route::prefix('v1')->group(function () {
         Route::get('profile', [ProfileController::class, 'profile']);
         Route::post('profile/update', [ProfileController::class, 'updateProfile']);
         Route::patch('profile/deactivate', [ProfileController::class, 'deactivate']);
+        Route::prefix('notifications')->group(function () {
+            Route::get('/', [NotificationController::class, 'index']);
+            Route::post('{id}/read', [NotificationController::class, 'markAsRead']);
+            Route::post('read-all', [NotificationController::class, 'markAllAsRead']);
+        });
         Route::get('user-bookings', [BookingController::class, 'userBookings']);
+        Route::get('user-bookings/{id}', [BookingController::class, 'showBooking']);
+        Route::get('my-donations', [DonationController::class, 'myDonations']);
+        Route::get('my-donations/{id}', [DonationController::class, 'showMyDonation']);
+        Route::get('my-donations/{id}/receipt', [DonationController::class, 'generateReceipt']);
     });
 });

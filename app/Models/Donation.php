@@ -18,6 +18,7 @@ class Donation extends Model
         'mobile_no',
         'amount',
         'date',
+        'time',
         'foundation_name',
         'is_marquee',
         'payment_receipt',
@@ -26,5 +27,10 @@ class Donation extends Model
     public function project()
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function receipt()
+    {
+        return $this->hasOne(DonationReceipt::class);
     }
 }

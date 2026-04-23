@@ -52,4 +52,9 @@ class User extends Authenticatable
     {
         return $this->hasOne(Members::class);
     }
+
+    public function donationReceipts()
+    {
+        return $this->hasMany(DonationReceipt::class);
+    }
 }
