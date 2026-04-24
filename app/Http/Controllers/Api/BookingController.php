@@ -8,6 +8,7 @@ use App\Models\Booking;
 use App\Models\User;
 use App\Notifications\BookingConfirmedNotification;
 use App\Notifications\BookingRejectedNotification;
+use App\Notifications\BookingSubmittedNotification;
 use App\Notifications\NewBookingAdminNotification;
 use App\Traits\ApiResponse;
 use Exception;
@@ -216,9 +217,12 @@ class BookingController extends Controller
                 'id_image_path' => $idImagePath,
             ]));
 
+            $booking->load('asset');
+
             // Notify all Super Admins
             $admins = User::where('role', 'Super Admin')->get();
             Notification::send($admins, new NewBookingAdminNotification($booking));
+            $user->notify(new BookingSubmittedNotification($booking));
 
             return $this->successResponse($booking, 'Your booking request has been submitted successfully.', 201);
         } catch (ModelNotFoundException $e) {
@@ -241,7 +245,7 @@ class BookingController extends Controller
                 'reason' => 'required|string',
             ]);
 
-            $booking = Booking::findOrFail($request->id);
+            $booking = Booking::with(['user', 'asset'])->findOrFail($request->id);
 
             $wasApproved = $booking->status === 'Approved';
             $booking->update([
@@ -282,6 +286,7 @@ class BookingController extends Controller
             'status' => 'required|in:Approved,Rejected',
         ]);
 
+        $booking->loadMissing(['user', 'asset']);
         $previousStatus = $booking->status;
         $booking->update(['status' => $request->status]);
 
@@ -297,13 +302,19 @@ class BookingController extends Controller
             }
         }
 
-        if ($booking->user) {
-            if ($request->status === 'Approved') {
-                $booking->user->notify(new BookingConfirmedNotification($booking->load('asset')));
+        if ($request->status === 'Approved') {
+            if ($booking->user) {
+                $booking->user->notify(new BookingConfirmedNotification($booking));
+            } else {
+                Notification::route('mail', $booking->user_email)->notify(new BookingConfirmedNotification($booking));
             }
+        }
 
-            if ($request->status === 'Rejected') {
-                $booking->user->notify(new BookingRejectedNotification($booking->load('asset'), 'Booking was rejected by admin.'));
+        if ($request->status === 'Rejected') {
+            if ($booking->user) {
+                $booking->user->notify(new BookingRejectedNotification($booking, 'Booking was rejected by admin.'));
+            } else {
+                Notification::route('mail', $booking->user_email)->notify(new BookingRejectedNotification($booking, 'Booking was rejected by admin.'));
             }
         }
 
