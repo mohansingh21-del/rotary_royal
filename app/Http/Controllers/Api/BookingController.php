@@ -139,7 +139,7 @@ class BookingController extends Controller
                 'user_name' => 'required|string|max:255',
                 'user_phone' => 'required|regex:/^[0-9]{10}$/',
                 'user_email' => 'required|email',
-                'start_date' => 'required|date|after_or_equal:now',
+                'start_date' => 'required|date|after_or_equal:today',
                 'end_date' => 'required|date|after:start_date',
                 'id_number' => 'required|string',
                 'id_image_path' => 'required|image|mimes:jpeg,png,jpg,gif,svg,webp|max:5120',
@@ -207,24 +207,29 @@ class BookingController extends Controller
                 ]);
             }
 
-            // Create Booking
+            // Create Booking (auto-approved by default)
             $booking = Booking::create(array_merge($request->except(['payment_image', 'id_image_path']), [
                 'id' => $newId,
                 'user_id' => $user->id,
-                'status' => 'Pending',
+                'status' => 'Approved',
                 'buffer_time' => $asset->buffer_time,
                 'payment_image' => $paymentImagePath,
                 'id_image_path' => $idImagePath,
             ]));
+
+            // Decrement asset left_quantity since booking is auto-approved
+            if ($asset->left_quantity > 0) {
+                $asset->decrement('left_quantity');
+            }
 
             $booking->load('asset');
 
             // Notify all Super Admins
             $admins = User::where('role', 'Super Admin')->get();
             Notification::send($admins, new NewBookingAdminNotification($booking));
-            $user->notify(new BookingSubmittedNotification($booking));
+            $user->notify(new BookingConfirmedNotification($booking));
 
-            return $this->successResponse($booking, 'Your booking request has been submitted successfully.', 201);
+            return $this->successResponse($booking, 'Your booking has been approved successfully.', 201);
         } catch (ModelNotFoundException $e) {
             return $this->errorResponse('Asset not found', 404);
         } catch (\Illuminate\Validation\ValidationException $e) {

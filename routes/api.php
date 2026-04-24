@@ -41,6 +41,7 @@ Route::prefix('v1')->group(function () {
     Route::get('events', [EventController::class, 'publicEvents']);
     Route::get('events/{id}', [EventController::class, 'show']);
     Route::get('members', [UserController::class, 'activeMembers']);
+    Route::get('members/{id}', [UserController::class, 'showMember']);
     Route::get('projects', [ProjectController::class, 'publicProjects']);
     Route::get('projects/{id}', [ProjectController::class, 'show']);
     Route::get('marquee-message', [DonationController::class, 'getMarqueeMessagePublic']);
@@ -48,13 +49,16 @@ Route::prefix('v1')->group(function () {
     Route::get('recent-donors', [DonationController::class, 'getDonors']);
 
     // --- Public Interaction Routes ---
-    Route::post('bookings', [BookingController::class, 'store']); 
-    Route::post('donations', [DonationController::class, 'store']); 
+    Route::post('bookings', [BookingController::class, 'store']);
+    Route::post('donations', [DonationController::class, 'store']);
+
+    // --- Shared Authenticated Routes (all users) ---
+    Route::middleware(['auth:sanctum'])->group(function () {
+        Route::post('auth/logout', [AuthController::class, 'logout']);
+    });
 
     // --- Protected Admin Routes ---
     Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(function () {
-
-        Route::post('auth/logout', [AuthController::class, 'logout']);
 
         // Assets Management
         Route::prefix('assets')->group(function () {
@@ -144,6 +148,7 @@ Route::prefix('v1')->group(function () {
     // --- Protected User Routes ---
     Route::middleware(['auth:sanctum'])->prefix('user')->group(function () {
         Route::get('profile', [ProfileController::class, 'profile']);
+
         Route::post('profile/update', [ProfileController::class, 'updateProfile']);
         Route::patch('profile/deactivate', [ProfileController::class, 'deactivate']);
         Route::prefix('notifications')->group(function () {

@@ -45,7 +45,7 @@ class NewBookingAdminNotification extends Notification
             'booking_id' => $this->booking->id,
             'member_name' => $this->booking->user->name ?? 'Guest',
             'asset_name' => $this->booking->asset->name ?? 'Unknown Asset',
-            'message' => 'New booking request for ' . ($this->booking->asset->name ?? 'Unknown Asset'),
+            'message' => 'New booking for ' . ($this->booking->asset->name ?? 'Unknown Asset') . ' has been approved.',
             'type' => 'new_booking',
         ];
     }

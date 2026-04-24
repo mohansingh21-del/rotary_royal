@@ -81,6 +81,46 @@ class UserController extends Controller
     }
 
     /**
+     * Get details of a specific member (Public API).
+     */
+    public function showMember($id)
+    {
+        try {
+            $user = User::with('member')
+                ->where('role', 'Member')
+                ->where('status', '1')
+                ->whereHas('member', function ($q) use ($id) {
+                    $q->where('id', $id);
+                })
+                ->firstOrFail();
+
+            $member = $user->member;
+
+            return $this->successResponse([
+                'id' => $member->id,
+                'user_id' => $user->id,
+                'member_id' => $member->member_id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'status' => $user->status,
+                'role' => $user->role,
+                'image' => $member->image ? asset($member->image) : null,
+                'address' => $member->address,
+                'dob' => $member->dob,
+                'gender' => $member->gender,
+                'work' => $member->work,
+                'date_of_joining' => $member->date_of_joining,
+                'created_at' => $user->created_at,
+            ], 'Member details retrieved successfully');
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return $this->errorResponse('Member not found', 404);
+        } catch (Exception $e) {
+            return $this->errorResponse('Failed to fetch member details: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
      * Format user data for consistent API response.
      */
     private function formatUser($user)
