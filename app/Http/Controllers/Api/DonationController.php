@@ -378,6 +378,7 @@ class DonationController extends Controller
                         'date' => $donation->date,
                         'time' => $donation->time ? date('h:i a', strtotime($donation->time)) : ($donation->created_at ? $donation->created_at->format('h:i a') : null),
                         'project_id' => $donation->project_id,
+                        'project' => $donation->project,
                         'donated_for' => $donation->project?->name ?? 'Rotary Club',
                     ];
                 });
@@ -405,6 +406,7 @@ class DonationController extends Controller
                         'date' => $donation->date,
                         'time' => $donation->time ? date('h:i a', strtotime($donation->time)) : ($donation->created_at ? $donation->created_at->format('h:i a') : null),
                         'project_id' => $donation->project_id,
+                        'project' => $donation->project,
                         'donated_for' => $donation->project?->name ?? 'Rotary Club',
                     ];
                 });
@@ -490,6 +492,7 @@ class DonationController extends Controller
             'amount' => $donation->amount,
             'donated_for' => $donation->project?->name ?? 'Rotary Club',
             'project_id' => $donation->project_id,
+            'project' => $donation->project,
             'date' => $donation->date,
             'time' => $donation->time ? date('h:i a', strtotime($donation->time)) : ($donation->created_at ? $donation->created_at->format('h:i a') : null),
             'is_marquee' => $donation->is_marquee,

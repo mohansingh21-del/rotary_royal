@@ -19,6 +19,13 @@ class Kernel extends ConsoleKernel
         $schedule->call(function () {
             app()->make(\App\Services\BookingService::class)->refreshAssetAvailability();
         })->everyMinute()->name('booking-refresh')->withoutOverlapping();
+
+        // Turn off funding availability for completed projects every day
+        $schedule->call(function () {
+            \App\Models\Project::whereDate('end_date', '<', now()->timezone('Asia/Kolkata')->toDateString())
+                ->where('is_funding_available', 1)
+                ->update(['is_funding_available' => 0]);
+        })->daily()->timezone('Asia/Kolkata')->name('project-funding-expiration')->withoutOverlapping();
     }
 
     /**

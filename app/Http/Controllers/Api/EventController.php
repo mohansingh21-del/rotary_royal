@@ -153,7 +153,7 @@ class EventController extends Controller
                 'category_id' => 'nullable|exists:categories,id',
                 'description' => 'nullable|string',
                 'banner_image' => ($id ? 'nullable' : 'required') . '|image|mimes:jpeg,png,jpg|max:5120|dimensions:ratio=2/1',
-                'gallery_images' => 'nullable|array',
+                'gallery_images' => 'nullable|array|max:6',
                 'gallery_images.*' => [
                     'nullable',
                     function ($attribute, $value, $fail) {
@@ -252,7 +252,7 @@ class EventController extends Controller
             );
 
             return $this->successResponse(
-                $this->formatEvent($event->load('images')),
+                $this->formatEvent($event->load(['images', 'category'])),
                 $id ? 'Event updated successfully' : 'Event created successfully',
                 $id ? 200 : 201
             );
@@ -397,7 +397,7 @@ class EventController extends Controller
                 });
             }
 
-            $query->orderBy('date', 'ASC');
+            $query->orderBy('date', 'DESC');
 
             if ($limit) {
                 $events = $query->paginate($limit, ['*'], 'page', $page);

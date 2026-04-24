@@ -190,7 +190,7 @@ class ProjectController extends Controller
                 'start_date' => 'required|date',
                 'end_date' => 'required|date|after_or_equal:start_date',
                 'is_funding_available' => 'boolean',
-                'gallery_images' => 'nullable|array',
+                'gallery_images' => 'nullable|array|max:6',
                 'gallery_images.*' => [
                     'nullable',
                     function ($attribute, $value, $fail) {
@@ -424,7 +424,7 @@ class ProjectController extends Controller
                 });
             }
 
-            $query->orderBy('created_at', 'DESC');
+            $query->orderBy('start_date', 'DESC')->orderBy('end_date', 'DESC');
 
             if ($limit) {
                 $projects = $query->paginate($limit, ['*'], 'page', $page);

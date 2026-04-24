@@ -194,7 +194,24 @@ class BookingController extends Controller
             }
 
             // Auto-registration logic
-            $user = User::where('phone', $request->user_phone)->first();
+            $phone = trim($request->user_phone);
+            $email = strtolower(trim($request->user_email));
+            $userByPhone = User::where('phone', $phone)->first();
+            $userByEmail = User::where('email', $email)->first();
+
+            if ($userByPhone && $userByPhone->email !== $email) {
+                return $this->errorResponse('Validation error', 422, [
+                    'user_phone' => ['This phone number is already associated with another email address.']
+                ]);
+            }
+
+            if ($userByEmail && $userByEmail->phone !== $request->user_phone) {
+                return $this->errorResponse('Validation error', 422, [
+                    'user_email' => ['This email address is already associated with another phone number.']
+                ]);
+            }
+
+            $user = $userByPhone;
 
             if (!$user) {
                 $user = User::create([
@@ -222,14 +239,14 @@ class BookingController extends Controller
                 $asset->decrement('left_quantity');
             }
 
-            $booking->load('asset');
+            $booking->load(['asset', 'user', 'referrer']);
 
             // Notify all Super Admins
             $admins = User::where('role', 'Super Admin')->get();
             Notification::send($admins, new NewBookingAdminNotification($booking));
             $user->notify(new BookingConfirmedNotification($booking));
 
-            return $this->successResponse($booking, 'Your booking has been approved successfully.', 201);
+            return $this->successResponse($this->formatBooking($booking), 'Your booking has been approved successfully.', 201);
         } catch (ModelNotFoundException $e) {
             return $this->errorResponse('Asset not found', 404);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -422,7 +439,18 @@ class BookingController extends Controller
             'id_number' => $booking->id_number,
             'id_image_path' => $booking->id_image_path ? asset($booking->id_image_path) : null,
             'payment_image' => $booking->payment_image ? asset($booking->payment_image) : null,
-            'reference' => $booking->referrer?->name ?? $booking->reference,
+            'reference' => $booking->reference,
+            'referrer' => $booking->referrer ? [
+                'id' => $booking->referrer->id,
+                'name' => $booking->referrer->name,
+                'phone' => $booking->referrer->phone,
+            ] : null,
+            'asset' => $booking->asset,
+            'user' => $booking->user ? [
+                'id' => $booking->user->id,
+                'name' => $booking->user->name,
+                'phone' => $booking->user->phone,
+            ] : null,
             'status' => $booking->status,
             'buffer_time' => $booking->buffer_time,
             'rejection_reason' => $booking->rejection_reason,
