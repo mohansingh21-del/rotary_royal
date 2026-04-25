@@ -14,12 +14,22 @@ use Illuminate\Support\Facades\Notification;
 use Exception;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
+/**
+ * Controller orchestrating community Events.
+ * Coordinates geographical pins, media galleries, and strictly schedules recurring/one-off events.
+ */
 class EventController extends Controller
 {
     use ApiResponse;
 
     /**
      * Display a listing of events.
+     */
+    /**
+     * Securely yield paginated internal Event matrices customized explicitly via Category bounds.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
      */
     public function index(Request $request)
     {
@@ -109,7 +119,7 @@ class EventController extends Controller
             ]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse("Validation error", 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Operation failed: ' . $e->getMessage(), 500);
         }
@@ -136,6 +146,13 @@ class EventController extends Controller
 
     /**
      * Store or update an event.
+     */
+    /**
+     * Process robust form-data payloads attaching unified Map coordinates and Event Gallery images.
+     * Dynamically cleans up ghost files preventing local storage expansion constraints.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
      */
     public function store(Request $request)
     {
@@ -251,18 +268,18 @@ class EventController extends Controller
                 new EventAdminNotification($event->fresh(), $id ? 'updated' : 'created')
             );
 
-            return $this->successResponse(
-                $this->formatEvent($event->load(['images', 'category'])),
-                $id ? 'Event updated successfully' : 'Event created successfully',
-                $id ? 200 : 201
-            );
+            if ($id) {
+                return $this->successResponse($this->formatEvent($event->load(['images', 'category'])), 'Event updated successfully');
+            } else {
+                return $this->createdResponse($this->formatEvent($event->load(['images', 'category'])), 'Event created successfully');
+            }
 
         } catch (ModelNotFoundException $e) {
             DB::rollBack();
-            return $this->errorResponse('Event not found', 404);
+            return $this->notFoundResponse('Event not found');
         } catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
-            return $this->errorResponse('Validation error', 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             DB::rollBack();
             return $this->errorResponse('Failed to save event: ' . $e->getMessage(), 500);
@@ -272,12 +289,18 @@ class EventController extends Controller
     /**
      * Display the specified event.
      */
+    /**
+     * Yield explicit geographical and gallery bounds for a hyper-targeted Event ID.
+     *
+     * @param string $id
+     * @return \Illuminate\Http\JsonResponse
+     */
     public function show($id)
     {
         try {
             $event = Event::with(['images', 'category'])->find($id);
             if (!$event) {
-                return $this->errorResponse('Event not found', 404);
+                return $this->notFoundResponse('Event not found');
             }
 
             $data = [
@@ -300,7 +323,7 @@ class EventController extends Controller
 
             return $this->successResponse($data, 'Event details retrieved successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse("Validation error", 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Operation failed: ' . $e->getMessage(), 500);
         }
@@ -308,6 +331,12 @@ class EventController extends Controller
 
     /**
      * Remove the specified event.
+     */
+    /**
+     * Deeply terminate an Event explicitly severing physical banner mappings ensuring absolute storage optimization.
+     *
+     * @param string $id
+     * @return \Illuminate\Http\JsonResponse
      */
     public function destroy($id)
     {
@@ -330,7 +359,7 @@ class EventController extends Controller
 
             return $this->successResponse(null, 'Event deleted successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse("Validation error", 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Operation failed: ' . $e->getMessage(), 500);
         }
@@ -338,6 +367,12 @@ class EventController extends Controller
 
     /**
      * Toggle is_active status.
+     */
+    /**
+     * Safely flip Public visibility booleans dynamically for quick Mobile App feed refreshes.
+     *
+     * @param string $id
+     * @return \Illuminate\Http\JsonResponse
      */
     public function toggleStatus($id)
     {
@@ -353,11 +388,17 @@ class EventController extends Controller
 
             return $this->successResponse($event, 'Status updated successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse("Validation error", 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Operation failed: ' . $e->getMessage(), 500);
         }
     }
+    /**
+     * Render the strictly explicit Active Events mapping natively for unauthenticated public mobile access.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
     public function publicEvents(Request $request)
     {
         try {
@@ -438,15 +479,10 @@ class EventController extends Controller
                 ];
             }
 
-            return response()->json([
-                'status' => 200,
-                'message' => 'Events fetched successfully',
-                'data' => $response['data'],
-                'pagination' => $response['pagination'] ?? null,
-            ]);
+            return $this->successResponse($response['data'], 'Events fetched successfully', 200, ['pagination' => $response['pagination'] ?? null]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse("Validation error", 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Operation failed: ' . $e->getMessage(), 500);
         }

@@ -6,14 +6,19 @@ use RuntimeException;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
 
+/**
+ * External Integration Service wrapper for Outbound SMS providers.
+ * Decouples actual Telecom logic from Auth pipelines allowing seamless provider swapping.
+ */
 class SmsService
 {
     /**
-     * Simulate sending an OTP via SMS.
-     * Replace this with your actual outbound SMS gateway (Twilio, MSG91, etc).
+     * Dispatch an OTP via external SMS provider dynamically.
+     * Ensure this utilizes deferred queued processing (Delay/Jobs) in production arrays.
      *
      * @param string $mobile_no
      * @param string $otp
+     * @return string
      */
     public function sendOtp(string $mobile_no, string $otp)
     {

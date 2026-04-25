@@ -50,11 +50,7 @@ class UserController extends Controller
                     return $this->formatUser($user);
                 });
 
-                return response()->json([
-                    'status' => 200,
-                    'message' => 'Active members retrieved successfully',
-                    'data' => $items,
-                    'pagination' => [
+                return $this->successResponse($items, 'Active members retrieved successfully', 200, ['pagination' => [
                         'total' => $users->total(),
                         'current_page' => $users->currentPage(),
                         'per_page' => $users->perPage(),
@@ -63,8 +59,7 @@ class UserController extends Controller
                         'to' => $users->lastItem(),
                         'next_page_url' => $users->nextPageUrl(),
                         'previous_page_url' => $users->previousPageUrl(),
-                    ]
-                ]);
+                    ]]);
             } else {
                 $users = $query->get();
                 $data = $users->map(function ($user) {
@@ -74,7 +69,7 @@ class UserController extends Controller
                 return $this->successResponse($data, 'Active members retrieved successfully');
             }
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse("Validation error", 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
@@ -114,7 +109,7 @@ class UserController extends Controller
                 'created_at' => $user->created_at,
             ], 'Member details retrieved successfully');
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return $this->errorResponse('Member not found', 404);
+            return $this->notFoundResponse('Member not found');
         } catch (Exception $e) {
             return $this->errorResponse('Failed to fetch member details: ' . $e->getMessage(), 500);
         }
@@ -180,9 +175,9 @@ class UserController extends Controller
             return $this->successResponse($user, 'Member created successfully', 201);
 
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return $this->errorResponse('User not found', 404);
+            return $this->notFoundResponse('User not found');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse('Validation error', 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to create member: ' . $e->getMessage(), 500);
         }

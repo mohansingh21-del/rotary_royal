@@ -102,9 +102,9 @@ class CategoryController extends Controller
                 $id ? 200 : 201
             );
         } catch (ModelNotFoundException $e) {
-            return $this->errorResponse('Category not found', 404);
+            return $this->notFoundResponse('Category not found');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse('Validation error', 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to save category: ' . $e->getMessage(), 500);
         }
@@ -119,14 +119,14 @@ class CategoryController extends Controller
             $category = Category::findOrFail($id);
             // Check if it's being used by events
             if ($category->events()->exists()) {
-                return $this->errorResponse('Category cannot be deleted as it is associated with events', 400);
+                return $this->conflictResponse('Category cannot be deleted as it is associated with events');
             }
             $category->delete();
             return $this->successResponse(null, 'Category deleted successfully');
         } catch (ModelNotFoundException $e) {
-            return $this->errorResponse('Category not found', 404);
+            return $this->notFoundResponse('Category not found');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse("Validation error", 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to delete category: ' . $e->getMessage(), 500);
         }
@@ -138,7 +138,7 @@ class CategoryController extends Controller
             $categories = Category::where('is_active', 1)->get();
             return $this->successResponse($categories, 'Categories retrieved successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse("Validation error", 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to fetch public categories: ' . $e->getMessage(), 500);
         }
@@ -156,9 +156,9 @@ class CategoryController extends Controller
 
             return $this->successResponse($category, 'Status updated successfully');
         } catch (ModelNotFoundException $e) {
-            return $this->errorResponse('Category not found', 404);
+            return $this->notFoundResponse('Category not found');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse("Validation error", 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to update status: ' . $e->getMessage(), 500);
         }
@@ -170,9 +170,9 @@ class CategoryController extends Controller
             $category = Category::findOrFail($id);
             return $this->successResponse($category, 'Category retrieved successfully');
         } catch (ModelNotFoundException $e) {
-            return $this->errorResponse('Category not found', 404);
+            return $this->notFoundResponse('Category not found');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse("Validation error", 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to retrieve category: ' . $e->getMessage(), 500);
         }

@@ -19,12 +19,23 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 
+/**
+ * Controller administrating Donations and Financial Project support arrays.
+ * Serves strict invoice generation, Guest account tracking, and public Marquee broadcasting.
+ */
 class DonationController extends Controller
 {
     use ApiResponse;
 
     /**
      * Display a listing of donations with search and filters.
+     */
+    /**
+     * Retrieve a detailed, paginated master ledger of all project donations globally.
+     * Accessible strictly by Administrative dashboards.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
      */
     public function index(Request $request)
     {
@@ -109,15 +120,10 @@ class DonationController extends Controller
                 ];
             }
 
-            return response()->json([
-                'status' => 200,
-                'message' => 'Donations retrieved successfully',
-                'data' => $response['data'],
-                'pagination' => $response['pagination'] ?? null,
-            ]);
+            return $this->successResponse($response['data'], 'Donations retrieved successfully', 200, ['pagination' => $response['pagination'] ?? null]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse("Validation error", 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
@@ -125,6 +131,13 @@ class DonationController extends Controller
 
     /**
      * Store a new donation record.
+     */
+    /**
+     * Store an external payment notification acknowledging a public project donation.
+     * Automatically registers previously unseen Users mapped silently to Non-Member roles.
+     * 
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
      */
     public function store(Request $request)
     {
@@ -189,7 +202,7 @@ class DonationController extends Controller
 
             DB::commit();
 
-            return $this->successResponse([
+            return $this->createdResponse([
                 'donation' => $this->formatDonation($donation->load('project')),
                 'receipt' => [
                     'id' => $receipt->id,
@@ -198,12 +211,12 @@ class DonationController extends Controller
                     'status' => $receipt->status,
                     'pdf_url' => asset($receipt->pdf_path),
                 ],
-            ], 'Donation recorded successfully', 201);
+            ], 'Donation recorded successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
             if (DB::transactionLevel() > 0) {
                 DB::rollBack();
             }
-            return $this->errorResponse('Validation error', 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             if (DB::transactionLevel() > 0) {
                 DB::rollBack();
@@ -215,19 +228,22 @@ class DonationController extends Controller
     /**
      * Toggle the marquee status of a donation.
      */
+    /**
+     * Toggle the public visibility of a selected massive donation dynamically into the Frontend Marquee Ticker.
+     *
+     * @param Request $request
+     * @param Donation $donation
+     * @return \Illuminate\Http\JsonResponse
+     */
     public function toggleMarquee(Request $request, Donation $donation)
     {
         try {
             $donation->is_marquee = !$donation->is_marquee;
             $donation->save();
 
-            return response()->json([
-                'status' => 200,
-                'message' => 'Marquee status updated successfully',
-                'data' => $donation,
-            ]);
+            return $this->successResponse($donation, 'Marquee status updated successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse("Validation error", 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
@@ -250,13 +266,9 @@ class DonationController extends Controller
                 ]);
             }
 
-            return response()->json([
-                'status' => 200,
-                'message' => 'Marquee message stored successfully',
-                'data' => $marqueeMessage,
-            ]);
+            return $this->successResponse($marqueeMessage, 'Marquee message stored successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse("Validation error", 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
@@ -272,7 +284,7 @@ class DonationController extends Controller
                 'data' => $marqueeMessage,
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse("Validation error", 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
@@ -298,17 +310,13 @@ class DonationController extends Controller
                 $marqueeList[] = $prefix;
             }
 
-            return response()->json([
-                'status' => 200,
-                'message' => 'Marquee message and donor list retrieved successfully',
-                'data' => [
-                    'marquee_message' => $marqueeMessage ? $marqueeMessage->marquee_message : null,
-                    'marquee_donors' => $donors,
-                    'combined_list' => $marqueeList,
-                ],
-            ]);
+            return $this->successResponse([
+                'marquee_message' => $marqueeMessage ? $marqueeMessage->marquee_message : null,
+                'marquee_donors' => $donors,
+                'combined_list' => $marqueeList,
+            ], 'Marquee message and donor list retrieved successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse("Validation error", 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
@@ -322,13 +330,9 @@ class DonationController extends Controller
                 ->orderBy('created_at', 'DESC')
                 ->get(['donor_name', 'amount', 'date']);
 
-            return response()->json([
-                'status' => 200,
-                'message' => 'Donors for the last 7 days retrieved successfully',
-                'data' => $donors,
-            ]);
+            return $this->successResponse($donors, 'Donors for the last 7 days retrieved successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse("Validation error", 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
@@ -448,12 +452,20 @@ class DonationController extends Controller
 
             return $this->successResponse($this->formatDonation($donation), 'Donation details retrieved successfully');
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return $this->errorResponse('Donation not found', 404);
+            return $this->notFoundResponse('Donation not found');
         } catch (Exception $e) {
             return $this->errorResponse('Failed to fetch donation details: ' . $e->getMessage(), 500);
         }
     }
 
+    /**
+     * Dynamically compile, render, and permanently store a canonical PDF Receipt mapped to exact user contributions.
+     * Utilizes DOMPDF to extract club configuration metadata securely printing tax-compliant documents.
+     *
+     * @param Request $request
+     * @param string $id
+     * @return \Illuminate\Http\JsonResponse
+     */
     public function generateReceipt(Request $request, $id)
     {
         try {
@@ -477,7 +489,7 @@ class DonationController extends Controller
                 ['Content-Type' => 'application/pdf']
             );
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return $this->errorResponse('Donation not found', 404);
+            return $this->notFoundResponse('Donation not found');
         } catch (Exception $e) {
             return $this->errorResponse('Failed to generate receipt: ' . $e->getMessage(), 500);
         }

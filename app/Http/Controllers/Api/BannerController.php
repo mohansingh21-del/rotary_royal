@@ -90,16 +90,9 @@ class BannerController extends Controller
                 ];
             }
 
-            return response()->json([
-                'status' => 200,
-                'message' => 'Banners retrieved successfully',
-                'data' => $response['data'],
-                'pagination' => $response['pagination'] ?? null,
-            ]);
+            return $this->successResponse($response['data'], 'Banners retrieved successfully', 200, ['pagination' => $response['pagination'] ?? null]);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse('Validation error', 422, $e->errors());
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse("Validation error", 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
@@ -141,11 +134,13 @@ class BannerController extends Controller
             $banner->order = $request->input('order', 0);
             $banner->save();
 
-            return $this->successResponse($banner, 'Banner saved successfully');
+            if ($id) {
+                return $this->successResponse($banner, 'Banner updated successfully');
+            } else {
+                return $this->createdResponse($banner, 'Banner created successfully');
+            }
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse('Validation error', 422, $e->errors());
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse("Validation error", 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
@@ -163,9 +158,7 @@ class BannerController extends Controller
 
             return $this->successResponse($banner, 'Banner status updated successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse('Validation error', 422, $e->errors());
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse("Validation error", 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
@@ -185,9 +178,7 @@ class BannerController extends Controller
 
             return $this->successResponse(null, 'Banner deleted successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse('Validation error', 422, $e->errors());
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse("Validation error", 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
@@ -206,9 +197,7 @@ class BannerController extends Controller
 
             return $this->successResponse($banners, 'Active banners retrieved successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse('Validation error', 422, $e->errors());
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->errorResponse("Validation error", 422, $e->errors());
+            return $this->validationResponse($e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
