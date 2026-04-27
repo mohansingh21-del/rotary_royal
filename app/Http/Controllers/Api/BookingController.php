@@ -18,20 +18,12 @@ use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
-/**
- * Controller orchestrating Asset reservations and lifecycle states.
- * Strictly enforces real-time stock limits, overlap bounds, and role-based tracking rules.
- */
 class BookingController extends Controller
 {
     use ApiResponse;
 
     /**
-     * Retrieve a detailed, paginated list of system Booking requests.
-     * Incorporates exhaustive search, specific Asset association targeting, and chronological range filtering.
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * Display a listing of bookings with search and filters.
      */
     public function index(Request $request)
     {
@@ -115,22 +107,22 @@ class BookingController extends Controller
                 ];
             }
 
-            return $this->successResponse($response['data'], 'Bookings retrieved successfully', 200, ['pagination' => $response['pagination'] ?? null]);
+            return response()->json([
+                'status' => 200,
+                'message' => 'Bookings retrieved successfully',
+                'data' => $response['data'],
+                'pagination' => $response['pagination'] ?? null,
+            ]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->validationResponse($e->errors());
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
     }
 
     /**
-     * Store a newly created Booking from a generic or authenticated Guest request.
-     * Handles complex concurrency resolution predicting stock quantity collisions utilizing exact chronologic interval buffers.
-     * Generates a temporary `Non-Member` shadow tracking ID automatically mapping recurring guests reliably.
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * Store a newly created booking (Guest Friendly).
      */
     public function store(Request $request)
     {
@@ -158,11 +150,10 @@ class BookingController extends Controller
             ]);
 
             if ($asset->left_quantity <= 0) {
-                return $this->conflictResponse('Not Available: No more units of this asset are available.');
+                return $this->errorResponse('Not Available: No more units of this asset are available.', 422);
             }
 
-            // Comprehensive Concurrency Availability Validation Check
-            // Projects End Date buffer ensuring Asset checkout delays overlap exactly
+            // Availability Check
             $newEndWithBuffer = \Illuminate\Support\Carbon::parse($request->end_date)->addHours($asset->buffer_time);
 
             $overlappingCount = Booking::where('asset_id', $request->asset_id)
@@ -172,7 +163,7 @@ class BookingController extends Controller
                 ->count();
 
             if ($overlappingCount >= $asset->quantity) {
-                return $this->conflictResponse('Not Available: This asset is fully booked for the selected time slot.');
+                return $this->errorResponse('Not Available: This asset is fully booked for the selected time slot.', 422);
             }
 
             // Handle Payment Image Upload
@@ -209,13 +200,13 @@ class BookingController extends Controller
             $userByEmail = User::where('email', $email)->first();
 
             if ($userByPhone && $userByPhone->email !== $email) {
-                return $this->validationResponse([
+                return $this->errorResponse('Validation error', 422, [
                     'user_phone' => ['This phone number is already associated with another email address.']
                 ]);
             }
 
             if ($userByEmail && $userByEmail->phone !== $request->user_phone) {
-                return $this->validationResponse([
+                return $this->errorResponse('Validation error', 422, [
                     'user_email' => ['This email address is already associated with another phone number.']
                 ]);
             }
@@ -255,11 +246,11 @@ class BookingController extends Controller
             Notification::send($admins, new NewBookingAdminNotification($booking));
             $user->notify(new BookingConfirmedNotification($booking));
 
-            return $this->createdResponse($this->formatBooking($booking), 'Your booking has been approved successfully.');
+            return $this->successResponse($this->formatBooking($booking), 'Your booking has been approved successfully.', 201);
         } catch (ModelNotFoundException $e) {
-            return $this->notFoundResponse('Asset not found');
+            return $this->errorResponse('Asset not found', 404);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->validationResponse($e->errors());
+            return $this->errorResponse('Validation error', 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to create booking: ' . $e->getMessage(), 500);
         }
@@ -267,13 +258,6 @@ class BookingController extends Controller
 
     /**
      * Reject a booking and notify the user.
-     */
-    /**
-     * Explicitly reject a pending Booking request providing a direct reason to the User.
-     * Frees previously bounded capacity lock incrementing exactly 1 back to standard quantity availability.
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
      */
     public function reject(Request $request)
     {
@@ -307,9 +291,9 @@ class BookingController extends Controller
 
             return $this->successResponse($booking, 'Booking rejected successfully.');
         } catch (ModelNotFoundException $e) {
-            return $this->notFoundResponse('Booking not found');
+            return $this->errorResponse('Booking not found', 404);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->validationResponse($e->errors());
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to reject booking: ' . $e->getMessage(), 500);
         }
@@ -317,14 +301,6 @@ class BookingController extends Controller
 
     /**
      * Update the status of a booking.
-     */
-    /**
-     * Patch a Booking directly mapping approval lifecycle events dynamically via unified REST logic.
-     * Automatically captures internal Asset deduction decrement triggering only upon strictly 'Approved' bindings.
-     *
-     * @param Request $request
-     * @param Booking $booking
-     * @return \Illuminate\Http\JsonResponse
      */
     public function updateStatus(Request $request, Booking $booking)
     {
@@ -369,12 +345,6 @@ class BookingController extends Controller
 
     /**
      * Get bookings made by the logged-in user.
-     */
-    /**
-     * Yield all personal Bookings specifically filtered strictly against an authenticated user session.
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
      */
     public function userBookings(Request $request)
     {
@@ -434,10 +404,15 @@ class BookingController extends Controller
                 ];
             }
 
-            return $this->successResponse($response['data'], 'Your bookings retrieved successfully', 200, ['pagination' => $response['pagination'] ?? null]);
+            return response()->json([
+                'status' => 200,
+                'message' => 'Your bookings retrieved successfully',
+                'data' => $response['data'],
+                'pagination' => $response['pagination'] ?? null,
+            ]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->validationResponse($e->errors());
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to fetch bookings: ' . $e->getMessage(), 500);
         }
@@ -483,12 +458,6 @@ class BookingController extends Controller
         ];
     }
 
-    /**
-     * Reveal granular details of a specific Booking ensuring strict authorization mapped entirely to the logged-in user.
-     *
-     * @param string $id
-     * @return \Illuminate\Http\JsonResponse
-     */
     public function showBooking($id)
     {
         try {
@@ -499,7 +468,7 @@ class BookingController extends Controller
 
             return $this->successResponse($this->formatBooking($booking), 'Booking details retrieved successfully');
         } catch (ModelNotFoundException $e) {
-            return $this->notFoundResponse('Booking not found or access denied');
+            return $this->errorResponse('Booking not found or access denied', 404);
         } catch (Exception $e) {
             return $this->errorResponse('Failed to fetch booking details: ' . $e->getMessage(), 500);
         }

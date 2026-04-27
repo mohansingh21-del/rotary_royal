@@ -15,20 +15,12 @@ use App\Services\SmsService;
 use App\Models\OtpVerification;
 use Illuminate\Support\Facades\Cache;
 
-/**
- * Centralized Authentication Controller.
- * Handles credential evaluations, token issuance, and OTP distribution logic securely.
- */
 class AuthController extends Controller
 {
     use ApiResponse;
 
     /**
-     * Authenticate an administrative user via password and issue a Sanctum token.
-     * Prevents standard members from logging in via standard web portal.
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * Handle authentication and token issuance.
      */
     public function login(Request $request)
     {
@@ -64,11 +56,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Revoke the currently authenticated user's active API token.
-     * Destroys current session footprints explicitly.
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * Handle logout and token deletion.
      */
     public function logout(Request $request)
     {
@@ -84,11 +72,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Generate and dispatch a hashed 4-digit OTP to the user's registered email.
-     * Enforces exact rate-limiting to prevent malicious flooding of outgoing SMTP servers.
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * Send a 4-digit OTP for password reset.
      */
     public function forgotPassword(Request $request)
     {
@@ -113,10 +97,10 @@ class AuthController extends Controller
 
         $otp = rand(1000, 9999);
 
-        // Clear explicitly existing orphaned subsets ensuring only latest OTP remains active
+        // Clear existing resets for this email
         DB::table('password_resets')->where('email', $request->email)->delete();
 
-        // Persist hashed payload securely
+        // Store hashed OTP
         DB::table('password_resets')->insert([
             'email' => $request->email,
             'token' => Hash::make($otp),
@@ -133,11 +117,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Validate an explicitly provided OTP and securely overwrite the mapped user password.
-     * Enforces an expiration window of 15 minutes to prevent stale token hijacking.
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
+     * Reset password using OTP.
      */
     public function resetPassword(Request $request)
     {
@@ -179,14 +159,6 @@ class AuthController extends Controller
         return $this->successResponse(null, 'Password reset successfully');
     }
 
-    /**
-     * Issue an SMS-based numerical OTP targeted at mobile Member authentication.
-     * Utilizes aggressive caching to prevent abusive spamming to the SMS gateway.
-     *
-     * @param Request $request
-     * @param SmsService $smsService
-     * @return \Illuminate\Http\JsonResponse
-     */
     public function sendOtp(Request $request, SmsService $smsService)
     {
         $request->validate(
@@ -204,7 +176,10 @@ class AuthController extends Controller
             ->first();
 
         if (!$user) {
-            return $this->notFoundResponse('Active user not found');
+            return response()->json([
+                'status' => 404,
+                'message' => 'Active user not found'
+            ], 404);
         }
 
         // Prevent spam (1 OTP per 60 sec)
@@ -231,24 +206,21 @@ class AuthController extends Controller
         try {
             $smsService->sendOtp($user->phone, $otp);
         } catch (\Exception $e) {
-            return $this->errorResponse('Failed to send OTP', 500);
+            return response()->json([
+                'status' => 500,
+                'message' => 'Failed to send OTP'
+            ], 500);
         }
 
 
 
-        return $this->successResponse([
+        return response()->json([
+            'status' => 200,
+            'message' => 'OTP sent successfully',
             'otp' => app()->environment('local') ? $otp : null, // Return OTP only in local env for testing
-        ], 'OTP sent successfully');
+        ]);
     }
 
-    /**
-     * Re-issue a fresh verification OTP while maintaining existing active verification sessions.
-     * Binds strict 60-second cooldown windows against the user's phone record mapping to avoid costs.
-     *
-     * @param Request $request
-     * @param SmsService $smsService
-     * @return \Illuminate\Http\JsonResponse
-     */
     public function resendOtp(Request $request, SmsService $smsService)
     {
         $request->validate([
@@ -260,7 +232,10 @@ class AuthController extends Controller
             ->first();
 
         if (!$user) {
-            return $this->notFoundResponse('Active user not found');
+            return response()->json([
+                'status' => 404,
+                'message' => 'Active user not found'
+            ], 404);
         }
 
         // Prevent spam (1 OTP per 60 sec)
@@ -287,21 +262,19 @@ class AuthController extends Controller
         try {
             $smsService->sendOtp($user->phone, $otp);
         } catch (\Exception $e) {
-            return $this->errorResponse('Failed to resend OTP', 500);
+            return response()->json([
+                'status' => 500,
+                'message' => 'Failed to resend OTP'
+            ], 500);
         }
 
-        return $this->successResponse([
+        return response()->json([
+            'status' => 200,
+            'message' => 'OTP resent successfully',
             'otp' => app()->environment('local') ? $otp : null, // Return OTP only in local env for testing
-        ], 'OTP resent successfully');
+        ]);
     }
 
-    /**
-     * Validate the mobile OTP payload and authenticate the Session via a new Sanctum Token.
-     * Enforces tight security lockouts after 5 consecutive failed authorization attempts.
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
-     */
     public function verifyOtp(Request $request)
     {
         $request->validate([
@@ -313,17 +286,26 @@ class AuthController extends Controller
 
         if (!$otpVerification || !$otpVerification->expires_at || $otpVerification->expires_at->isPast()) {
             OtpVerification::where('phone', $request->phone)->delete();
-            return $this->errorResponse('OTP expired or not found', 400);
+            return response()->json([
+                'status' => 400,
+                'message' => 'OTP expired or not found'
+            ], 400);
         }
 
         if ($otpVerification->attempts >= 5) {
-            return $this->errorResponse('Too many attempts. Try again later.', 429);
+            return response()->json([
+                'status' => 429,
+                'message' => 'Too many attempts. Try again later.'
+            ], 429);
         }
 
         if (!Hash::check($request->otp, $otpVerification->otp)) {
             $otpVerification->increment('attempts');
 
-            return $this->errorResponse('Invalid OTP', 400);
+            return response()->json([
+                'status' => 400,
+                'message' => 'Invalid OTP'
+            ], 400);
         }
 
         $user = User::where('phone', $request->phone)
@@ -331,7 +313,10 @@ class AuthController extends Controller
             ->first();
 
         if (!$user) {
-            return $this->notFoundResponse('Active user not found');
+            return response()->json([
+                'status' => 404,
+                'message' => 'Active user not found'
+            ], 404);
         }
 
         $otpVerification->delete();
@@ -339,7 +324,9 @@ class AuthController extends Controller
         // Generate token (Laravel Sanctum)
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        return $this->successResponse([
+        return response()->json([
+            'status' => 200,
+            'message' => 'Login successful',
             'token' => $token,
             'user' => [
                 'user_id' => $user->id,
@@ -351,6 +338,6 @@ class AuthController extends Controller
                 'status' => $user->status,
                 'role' => $user->role,
             ]
-        ], 'Login successful');
+        ]);
     }
 }

@@ -112,7 +112,7 @@ class ProfileController extends Controller
             ], 'Profile updated successfully');
 
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->validationResponse($e->errors());
+            return $this->errorResponse('Validation error', 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to update profile: ' . $e->getMessage(), 500);
         }

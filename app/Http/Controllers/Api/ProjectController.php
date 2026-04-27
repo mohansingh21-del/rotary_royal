@@ -15,23 +15,12 @@ use Illuminate\Support\Facades\Notification;
 use Exception;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
-/**
- * Controller administrating Rotary Project promotions.
- * Handles the publishing, metadata linkage, and gallery attachments for public charity projects.
- */
 class ProjectController extends Controller
 {
     use ApiResponse;
 
     /**
      * Display a listing of projects.
-     */
-    /**
-     * Retrieve paginated comprehensive lists of internal Projects.
-     * Incorporates category filters and active/inactive status queries suitable for Admin Dashboards.
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
      */
     public function index(Request $request)
     {
@@ -105,10 +94,15 @@ class ProjectController extends Controller
                 ];
             }
 
-            return $this->successResponse($response['data'], 'Projects fetched successfully', 200, ['pagination' => $response['pagination'] ?? null]);
+            return response()->json([
+                'status' => 200,
+                'message' => 'Projects fetched successfully',
+                'data' => $response['data'],
+                'pagination' => $response['pagination'] ?? null,
+            ]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->validationResponse($e->errors());
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to fetch projects: ' . $e->getMessage(), 500);
         }
@@ -182,13 +176,6 @@ class ProjectController extends Controller
 
     /**
      * Store or update a project.
-     */
-    /**
-     * Create or rigorously enforce updates (upserts) to a specific Rotary Project.
-     * Unifies multi-part form requests tracking robust base64 or binary image galleries and tags.
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
      */
     public function store(Request $request)
     {
@@ -299,18 +286,14 @@ class ProjectController extends Controller
                 new ProjectAdminNotification($project->fresh(), $id ? 'updated' : 'created')
             );
 
-            if ($id) {
-                return $this->successResponse($this->formatProject($project->load('images')), 'Project updated successfully');
-            } else {
-                return $this->createdResponse($this->formatProject($project->load('images')), 'Project created successfully');
-            }
+            return $this->successResponse($this->formatProject($project->load('images')), $id ? 'Project updated successfully' : 'Project created successfully', $id ? 200 : 201);
 
         } catch (ModelNotFoundException $e) {
             DB::rollBack();
-            return $this->notFoundResponse('Project not found');
+            return $this->errorResponse('Project not found', 404);
         } catch (\Illuminate\Validation\ValidationException $e) {
             DB::rollBack();
-            return $this->validationResponse($e->errors());
+            return $this->errorResponse('Validation error', 422, $e->errors());
         } catch (Exception $e) {
             DB::rollBack();
             return $this->errorResponse('Failed to save project: ' . $e->getMessage(), 500);
@@ -319,12 +302,6 @@ class ProjectController extends Controller
 
     /**
      * Display the specified project.
-     */
-    /**
-     * Expose exhaustive relationships bound to a specific Project (Images, Category, Timestamps).
-     *
-     * @param string $id
-     * @return \Illuminate\Http\JsonResponse
      */
     public function show($id)
     {
@@ -360,9 +337,9 @@ class ProjectController extends Controller
 
             return $this->successResponse($data, 'Project details retrieved successfully');
         } catch (ModelNotFoundException $e) {
-            return $this->notFoundResponse('Project not found');
+            return $this->errorResponse('Project not found', 404);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->validationResponse($e->errors());
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to retrieve project details: ' . $e->getMessage(), 500);
         }
@@ -371,13 +348,6 @@ class ProjectController extends Controller
 
     /**
      * Remove the specified project.
-     */
-    /**
-     * Purge a Project and deeply destroy isolated file artifacts explicitly.
-     * Prevents orphaned gallery images consuming generic server storage.
-     *
-     * @param string $id
-     * @return \Illuminate\Http\JsonResponse
      */
     public function destroy($id)
     {
@@ -400,9 +370,9 @@ class ProjectController extends Controller
 
             return $this->successResponse(null, 'Project deleted successfully');
         } catch (ModelNotFoundException $e) {
-            return $this->notFoundResponse('Project not found');
+            return $this->errorResponse('Project not found', 404);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->validationResponse($e->errors());
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to delete project: ' . $e->getMessage(), 500);
         }
@@ -410,12 +380,6 @@ class ProjectController extends Controller
 
     /**
      * Toggle funding status.
-     */
-    /**
-     * Flexibly toggle explicit Project visibility toggles across public mobile APIs.
-     *
-     * @param string $id
-     * @return \Illuminate\Http\JsonResponse
      */
     public function toggleStatus($id)
     {
@@ -431,20 +395,14 @@ class ProjectController extends Controller
 
             return $this->successResponse($this->formatProject($project->load('images')), 'Status updated successfully');
         } catch (ModelNotFoundException $e) {
-            return $this->notFoundResponse('Project not found');
+            return $this->errorResponse('Project not found', 404);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->validationResponse($e->errors());
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to update status: ' . $e->getMessage(), 500);
         }
     }
 
-    /**
-     * Exposed anonymous API strictly returning heavily cached, active Projects for Public guests.
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
-     */
     public function publicProjects(Request $request)
     {
         try {
@@ -506,10 +464,15 @@ class ProjectController extends Controller
                 ];
             }
 
-            return $this->successResponse($response['data'], 'Projects fetched successfully', 200, ['pagination' => $response['pagination'] ?? null]);
+            return response()->json([
+                'status' => 200,
+                'message' => 'Projects fetched successfully',
+                'data' => $response['data'],
+                'pagination' => $response['pagination'] ?? null,
+            ]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->validationResponse($e->errors());
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to fetch public projects: ' . $e->getMessage(), 500);
         }

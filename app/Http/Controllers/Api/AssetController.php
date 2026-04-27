@@ -104,7 +104,7 @@ class AssetController extends Controller
             ]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->validationResponse($e->errors());
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
@@ -184,9 +184,9 @@ class AssetController extends Controller
             return $this->successResponse($asset, 'Asset saved successfully', $id ? 200 : 201);
 
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            return $this->notFoundResponse('Asset not found');
+            return $this->errorResponse('Asset not found', 404);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->validationResponse($e->errors());
+            return $this->errorResponse('Validation error', 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to save asset: ' . $e->getMessage(), 500);
         }
@@ -204,7 +204,7 @@ class AssetController extends Controller
 
             // Block enabling if no stock is left
             if (!$asset->status && $asset->left_quantity === 0) {
-                return $this->conflictResponse('Cannot mark as available: no stock left (left_quantity is 0)');
+                return $this->errorResponse('Cannot mark as available: no stock left (left_quantity is 0)', 422);
             }
 
             $asset->status = (int) (!$asset->status);
@@ -212,7 +212,7 @@ class AssetController extends Controller
 
             return $this->successResponse($asset, 'Asset status updated successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->validationResponse($e->errors());
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }
@@ -229,13 +229,13 @@ class AssetController extends Controller
             $is_mapped = Booking::where('asset_id', $id)->exists();
 
             if ($is_mapped) {
-                return $this->conflictResponse('Cannot be deleted, Asset is mapped to a booking');
+                return $this->errorResponse('Cannot be deleted, Asset is mapped to a booking', 422);
             }
             $asset->delete();
 
             return $this->successResponse(null, 'Asset deleted successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->validationResponse($e->errors());
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse($e->getMessage(), 500);
         }

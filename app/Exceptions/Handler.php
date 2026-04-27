@@ -44,14 +44,7 @@ class Handler extends ExceptionHandler
 
         $this->renderable(function (\Symfony\Component\HttpKernel\Exception\NotFoundHttpException $e, $request) {
             if ($request->is('api/*')) {
-                return $this->notFoundResponse('The requested endpoint was not found.');
-            }
-        });
-
-        $this->renderable(function (\Illuminate\Database\Eloquent\ModelNotFoundException $e, $request) {
-            if ($request->is('api/*')) {
-                $model = str_replace('App\\Models\\', '', $e->getModel());
-                return $this->notFoundResponse($model . ' not found.');
+                return $this->errorResponse('The requested endpoint was not found.', 404);
             }
         });
 
@@ -63,42 +56,13 @@ class Handler extends ExceptionHandler
 
         $this->renderable(function (\Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException $e, $request) {
             if ($request->is('api/*')) {
-                return $this->forbiddenResponse('Access denied. You do not have permission to access this resource.');
+                return $this->errorResponse('Access denied. You do not have permission to access this resource.', 403);
             }
         });
 
         $this->renderable(function (\Illuminate\Validation\ValidationException $e, $request) {
             if ($request->is('api/*')) {
-                return $this->validationResponse($e->errors());
-            }
-        });
-
-        $this->renderable(function (\Illuminate\Http\Client\ConnectionException $e, $request) {
-            if ($request->is('api/*')) {
-                return $this->errorResponse('Service unavailable. Please try again later.', 503);
-            }
-        });
-
-        $this->renderable(function (Throwable $e, $request) {
-            if ($request->is('api/*')) {
-                // If it's a known HTTP exception, allow it to pass through to its specific handler
-                if ($e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface) {
-                    return $this->errorResponse($e->getMessage(), $e->getStatusCode());
-                }
-
-                // Internal Server Error handling for production
-                $message = config('app.debug') ? $e->getMessage() : 'Something went wrong. Please try again later.';
-                $status = 500;
-
-                // Log the entire traceback for debugging but keep it hidden from the client
-                \Illuminate\Support\Facades\Log::error($e->getMessage(), [
-                    'exception' => get_class($e),
-                    'file' => $e->getFile(),
-                    'line' => $e->getLine(),
-                    'trace' => $e->getTraceAsString()
-                ]);
-
-                return $this->errorResponse($message, $status);
+                return $this->errorResponse('Validation error', 422, $e->errors());
             }
         });
     }
@@ -113,7 +77,7 @@ class Handler extends ExceptionHandler
     protected function unauthenticated($request, AuthenticationException $exception)
     {
         if ($request->expectsJson() || $request->is('api/*')) {
-            return $this->unauthorizedResponse('Your session has expired or you are not logged in. Please log in again to continue.');
+            return $this->errorResponse('Your session has expired or you are not logged in. Please log in again to continue.', 401);
         }
 
         return redirect()->guest(route('login'));

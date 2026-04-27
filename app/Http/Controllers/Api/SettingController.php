@@ -21,12 +21,12 @@ class SettingController extends Controller
             $setting = Setting::first();
 
             if (!$setting || !isset($setting->$key)) {
-                return $this->notFoundResponse('Setting not found');
+                return $this->errorResponse('Setting not found', 404);
             }
 
             return $this->successResponse($setting->$key, "Setting for $key retrieved successfully");
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->validationResponse($e->errors());
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to retrieve setting: ' . $e->getMessage(), 500);
         }
@@ -61,7 +61,7 @@ class SettingController extends Controller
 
             return $this->successResponse($setting, 'Bank details updated successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->validationResponse($e->errors());
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to update bank details: ' . $e->getMessage(), 500);
         }
@@ -90,7 +90,7 @@ class SettingController extends Controller
 
             return $this->successResponse($data, 'Donation settings retrieved successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->validationResponse($e->errors());
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to retrieve donation settings: ' . $e->getMessage(), 500);
         }
@@ -149,7 +149,7 @@ class SettingController extends Controller
 
             return $this->successResponse($setting, 'Donation settings updated successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->validationResponse($e->errors());
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to update donation settings: ' . $e->getMessage(), 500);
         }
@@ -177,7 +177,7 @@ class SettingController extends Controller
 
             return $this->successResponse($setting, 'Marquee settings updated successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->validationResponse($e->errors());
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to update marquee settings: ' . $e->getMessage(), 500);
         }

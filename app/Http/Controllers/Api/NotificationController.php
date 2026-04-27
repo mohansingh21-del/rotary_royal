@@ -21,7 +21,7 @@ class NotificationController extends Controller
             $notifications = $request->user()->unreadNotifications;
             return $this->successResponse($notifications, 'Notifications retrieved successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->validationResponse($e->errors());
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to fetch notifications: ' . $e->getMessage(), 500);
         }
@@ -38,9 +38,9 @@ class NotificationController extends Controller
 
             return $this->successResponse(null, 'Notification marked as read');
         } catch (ModelNotFoundException $e) {
-            return $this->notFoundResponse('Notification not found');
+            return $this->errorResponse('Notification not found', 404);
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->validationResponse($e->errors());
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to mark notification as read: ' . $e->getMessage(), 500);
         }
@@ -55,7 +55,7 @@ class NotificationController extends Controller
             $request->user()->unreadNotifications->markAsRead();
             return $this->successResponse(null, 'All notifications marked as read');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->validationResponse($e->errors());
+            return $this->errorResponse("Validation error", 422, $e->errors());
         } catch (Exception $e) {
             return $this->errorResponse('Failed to mark all notifications as read: ' . $e->getMessage(), 500);
         }

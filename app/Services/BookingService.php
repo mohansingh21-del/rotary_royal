@@ -6,10 +6,6 @@ use App\Models\Asset;
 use App\Models\Booking;
 use Illuminate\Support\Facades\Log;
 
-/**
- * Service Layer abstracting intense periodic background capacity constraints.
- * Extracted from controllers to prevent memory bottlenecks during massive scale transactions.
- */
 class BookingService
 {
     /**
