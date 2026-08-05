@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Donation;
 use App\Models\DonationReceipt;
+use App\Models\Scopes\DummyVisibilityScope;
 use App\Models\User;
 use App\Notifications\DonationReceivedAdminNotification;
 use App\Notifications\DonationReceiptReadyNotification;
 use App\Traits\ApiResponse;
+use App\Traits\ProtectsDummyRecords;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Exception;
@@ -21,7 +23,7 @@ use Illuminate\Support\Str;
 
 class DonationController extends Controller
 {
-    use ApiResponse;
+    use ApiResponse, ProtectsDummyRecords;
 
     /**
      * Display a listing of donations with search and filters.
@@ -149,6 +151,11 @@ class DonationController extends Controller
 
             $user = User::where('phone', $request->mobile_no)->first();
 
+            // Public route, so the bearer token may be absent even for a signed-in
+            // caller — resolve the review account from the phone number too, or a
+            // reviewer's donation would land in real totals.
+            $isDummy = DummyVisibilityScope::actingUserIsDummy() || (bool) $user?->is_dummy;
+
             if (!$user) {
                 $user = User::create([
                     'name' => $request->donor_name,
@@ -157,6 +164,7 @@ class DonationController extends Controller
                     'password' => Hash::make(Str::random(16)),
                     'role' => 'Non-Member',
                     'status' => 1,
+                    'is_dummy' => $isDummy,
                 ]);
             }
 
@@ -168,8 +176,10 @@ class DonationController extends Controller
                 'date' => $request->date ?? now()->toDateString(),
                 'time' => now()->toTimeString(),
                 'foundation_name' => $request->foundation_name,
-                'is_marquee' => true,
+                // Review donations stay off the public marquee.
+                'is_marquee' => !$isDummy,
                 'payment_receipt' => $paymentReceiptPath,
+                'is_dummy' => $isDummy,
             ]);
 
             $receipt = DonationReceipt::create([
@@ -184,8 +194,11 @@ class DonationController extends Controller
             $pdfPath = $this->generateAndStoreReceiptPdf($donation->load('project'), $user, $receipt);
             $receipt->update(['pdf_path' => $pdfPath]);
 
-            $admins = User::where('role', 'Super Admin')->get();
-            Notification::send($admins, new DonationReceivedAdminNotification($donation));
+            // Review donations are visible to admins in the list; don't page them.
+            if (!$isDummy) {
+                $admins = User::where('role', 'Super Admin')->get();
+                Notification::send($admins, new DonationReceivedAdminNotification($donation));
+            }
 
             DB::commit();
 
@@ -218,6 +231,10 @@ class DonationController extends Controller
     public function toggleMarquee(Request $request, Donation $donation)
     {
         try {
+            if ($blocked = $this->blockIfDummy($donation)) {
+                return $blocked;
+            }
+
             $donation->is_marquee = !$donation->is_marquee;
             $donation->save();
 
@@ -282,7 +299,8 @@ class DonationController extends Controller
     {
         try {
             $marqueeMessage = MarqueeMessage::first();
-            $donors = Donation::where('is_marquee', true)
+            $donors = Donation::realOnly()
+                ->where('is_marquee', true)
                 ->orderBy('created_at', 'DESC')
                 ->pluck('donor_name')
                 ->toArray();
@@ -317,7 +335,8 @@ class DonationController extends Controller
     public function getDonors()
     {
         try {
-            $donors = Donation::where('date', '>=', now()->subDays(7)->toDateString())
+            $donors = Donation::realOnly()
+                ->where('date', '>=', now()->subDays(7)->toDateString())
                 ->orderBy('date', 'DESC')
                 ->orderBy('created_at', 'DESC')
                 ->get(['donor_name', 'amount', 'date']);
@@ -497,7 +516,7 @@ class DonationController extends Controller
             'time' => $donation->time ? date('h:i a', strtotime($donation->time)) : ($donation->created_at ? $donation->created_at->format('h:i a') : null),
             'is_marquee' => $donation->is_marquee,
             'payment_receipt' => $donation->receipt?->pdf_path ? asset($donation->receipt->pdf_path) : null,
-            
+            'is_dummy' => $donation->is_dummy,
         ];
     }
 

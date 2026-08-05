@@ -26,7 +26,8 @@ class UserController extends Controller
             $page = $request->input('page', 1);
             $search = $request->input('search');
 
-            $query = User::with('member')
+            $query = User::dummyVisible()
+                ->with('member')
                 ->where('role', 'Member')
                 ->where('status', '1')
                 ->whereHas('member');
@@ -86,7 +87,8 @@ class UserController extends Controller
     public function showMember($id)
     {
         try {
-            $user = User::with('member')
+            $user = User::dummyVisible()
+                ->with('member')
                 ->where('role', 'Member')
                 ->where('status', '1')
                 ->whereHas('member', function ($q) use ($id) {

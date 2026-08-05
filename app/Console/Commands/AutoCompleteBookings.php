@@ -32,7 +32,8 @@ class AutoCompleteBookings extends Command
         $now = now();
         $this->info("Checking for bookings to complete at {$now}...");
 
-        $bookings = Booking::where('status', 'Approved')
+        $bookings = Booking::realOnly()
+            ->where('status', 'Approved')
             ->with('asset')
             ->get();
 

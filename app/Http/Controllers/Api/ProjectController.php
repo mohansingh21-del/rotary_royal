@@ -306,7 +306,14 @@ class ProjectController extends Controller
     public function show($id)
     {
         try {
-            $project = Project::with(['images', 'donations'])->findOrFail($id);
+            // Funding totals and the contributor list are real money — a seeded
+            // review donation must never inflate them, not even for admins.
+            $project = Project::with([
+                'images',
+                'donations' => function ($query) {
+                    $query->realOnly();
+                },
+            ])->findOrFail($id);
 
             $totalFunding = $project->donations->sum('amount');
 

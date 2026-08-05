@@ -24,9 +24,11 @@ class AssetController extends Controller
             $page = $request->input('page', 1);
             $search = $request->input('search', null);
 
+            // Review bookings hold no stock, so they never count towards an
+            // asset's usage — not for anyone, including the review account.
             $query = Asset::withCount([
                 'bookings as approved_bookings_count' => function ($q) {
-                    $q->where('status', 'Approved');
+                    $q->realOnly()->where('status', 'Approved');
                 }
             ]);
 
@@ -170,7 +172,10 @@ class AssetController extends Controller
 
             // Recalculate left_quantity based on approved bookings
             $approvedCount = $asset->id
-                ? Booking::where('asset_id', $asset->id)->where('status', 'Approved')->count()
+                ? Booking::realOnly()
+                    ->where('asset_id', $asset->id)
+                    ->where('status', 'Approved')
+                    ->count()
                 : 0;
             $asset->left_quantity = max(0, $validated['quantity'] - $approvedCount);
 
@@ -226,7 +231,8 @@ class AssetController extends Controller
         try {
             $asset = Asset::findOrFail($id);
 
-            $is_mapped = Booking::where('asset_id', $id)->exists();
+            // A review booking must not stand in the way of deleting a real asset.
+            $is_mapped = Booking::realOnly()->where('asset_id', $id)->exists();
 
             if ($is_mapped) {
                 return $this->errorResponse('Cannot be deleted, Asset is mapped to a booking', 422);

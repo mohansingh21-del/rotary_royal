@@ -7,6 +7,7 @@ use App\Models\Members;
 use App\Models\User;
 use App\Models\Booking;
 use App\Traits\ApiResponse;
+use App\Traits\ProtectsDummyRecords;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -17,7 +18,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class MembersController extends Controller
 {
-    use ApiResponse;
+    use ApiResponse, ProtectsDummyRecords;
 
     /**
      * Display a listing of members only.
@@ -29,7 +30,10 @@ class MembersController extends Controller
             $page = $request->input('page', 1);
             $search = $request->input('search', null);
 
-            $query = User::with('member')->where('role', 'Member')->whereHas('member');
+            $query = User::dummyVisible()
+                ->with('member')
+                ->where('role', 'Member')
+                ->whereHas('member');
 
             if ($search) {
                 $query->where(function ($q) use ($search) {
@@ -118,7 +122,10 @@ class MembersController extends Controller
     public function show($id)
     {
         try {
-            $member = Members::with('user')->find($id);
+            // `Members` carries no flag of its own — constrain through the user.
+            $member = Members::with('user')
+                ->whereHas('user', fn ($query) => $query->dummyVisible())
+                ->find($id);
             if (!$member) {
                 return $this->errorResponse('Member not found', 404);
             }
@@ -233,7 +240,9 @@ class MembersController extends Controller
             $page = $request->input('page', 1);
             $search = $request->input('search', null);
 
-            $query = User::where('role', 'Non-Member')->whereDoesntHave('member');
+            $query = User::dummyVisible()
+                ->where('role', 'Non-Member')
+                ->whereDoesntHave('member');
 
             if ($search) {
                 $query->where(function ($q) use ($search) {
@@ -323,6 +332,10 @@ class MembersController extends Controller
                 return $this->errorResponse('Status of a Super Admin cannot be toggled', 403);
             }
 
+            if ($blocked = $this->blockIfDummy($user)) {
+                return $blocked;
+            }
+
             $user->status = ($user->status == 1) ? 0 : 1;
             $user->save();
 
@@ -338,6 +351,11 @@ class MembersController extends Controller
     {
         try {
             $user = User::findOrFail($id);
+
+            if ($blocked = $this->blockIfDummy($user)) {
+                return $blocked;
+            }
+
             $user->status = ($user->status == 1) ? 0 : 1;
             $user->save();
 

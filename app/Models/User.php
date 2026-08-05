@@ -9,11 +9,12 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Laravel\Sanctum\HasApiTokens;
 
+use App\Models\Concerns\HasDummyFlag;
 use App\Traits\SerializeLocalDates;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable, SoftDeletes, SerializeLocalDates;
+    use HasApiTokens, HasFactory, Notifiable, SoftDeletes, SerializeLocalDates, HasDummyFlag;
 
     /**
      * The attributes that are mass assignable.
@@ -27,6 +28,7 @@ class User extends Authenticatable
         'phone',
         'role',
         'status',
+        'is_dummy',
     ];
 
     /**
@@ -46,7 +48,19 @@ class User extends Authenticatable
      */
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'is_dummy' => 'boolean',
     ];
+
+    /**
+     * The review account's address is a placeholder that nothing can deliver
+     * to. Returning no route makes the mail channel skip it, so a store
+     * reviewer's actions never queue outbound mail — the database channel
+     * still records the notification, so their in-app list stays populated.
+     */
+    public function routeNotificationForMail($notification)
+    {
+        return $this->is_dummy ? null : $this->email;
+    }
 
     public function member()
     {

@@ -19,8 +19,10 @@ class BookingService
         $assetCount = 0;
 
         // ── Step 1: Auto-complete expired approved bookings ─────────────────
-        // Chunked to avoid memory issues on large datasets.
-        Booking::where('status', 'Approved')
+        // Chunked to avoid memory issues on large datasets. Real inventory only —
+        // the seeded review records are left frozen as they were seeded.
+        Booking::realOnly()
+            ->where('status', 'Approved')
             ->with('asset:id,buffer_time')
             ->chunkById(100, function ($bookings) use ($now, &$completedCount) {
                 foreach ($bookings as $booking) {
@@ -45,7 +47,8 @@ class BookingService
                 // Fetch approved booking counts for this batch of assets in one query
                 $assetIds = $assets->pluck('id');
 
-                $approvedCounts = Booking::selectRaw('asset_id, COUNT(*) as total')
+                $approvedCounts = Booking::realOnly()
+                    ->selectRaw('asset_id, COUNT(*) as total')
                     ->whereIn('asset_id', $assetIds)
                     ->where('status', 'Approved')
                     ->groupBy('asset_id')

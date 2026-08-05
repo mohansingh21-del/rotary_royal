@@ -5,11 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+use App\Models\Concerns\HasDummyVisibility;
 use App\Traits\SerializeLocalDates;
 
 class Booking extends Model
 {
-    use HasFactory, SerializeLocalDates;
+    use HasFactory, SerializeLocalDates, HasDummyVisibility;
 
     /**
      * The primary key for the model.
@@ -39,6 +40,7 @@ class Booking extends Model
         'id_image_path',
         'payment_image',
         'status',
+        'is_dummy',
         'buffer_time',
         'rejection_reason',
     ];
@@ -51,6 +53,7 @@ class Booking extends Model
     protected $casts = [
         'start_date' => 'datetime',
         'end_date' => 'datetime',
+        'is_dummy' => 'boolean',
     ];
 
     public function user()

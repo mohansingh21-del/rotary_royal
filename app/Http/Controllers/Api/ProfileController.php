@@ -10,12 +10,19 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Exception;
 use App\Traits\ApiResponse;
+use App\Traits\ProtectsDummyRecords;
 use App\Models\Members;
 use Illuminate\Support\Facades\Storage;
 
 class ProfileController extends Controller
 {
-    use ApiResponse;
+    use ApiResponse, ProtectsDummyRecords;
+
+    /**
+     * Shown to a store reviewer, so it reads as an intentional demo-account
+     * limit rather than a fault.
+     */
+    private const DUMMY_PROFILE_MESSAGE = 'Profile changes are disabled for the demo account.';
 
     public function profile(Request $request)
     {
@@ -45,6 +52,13 @@ class ProfileController extends Controller
     {
         try {
             $user = $request->user();
+
+            // Editing this account would break review itself: changing the phone
+            // orphans the fixed-OTP login the store reviewers were given.
+            if ($blocked = $this->blockIfDummy($user, self::DUMMY_PROFILE_MESSAGE)) {
+                return $blocked;
+            }
+
             $member = $user->member;
 
             $request->validate([
@@ -122,6 +136,13 @@ class ProfileController extends Controller
     {
         try {
             $user = $request->user();
+
+            // Deactivating would set status = 0, and the OTP login requires an
+            // active user — the review account would lock itself out for good.
+            if ($blocked = $this->blockIfDummy($user, self::DUMMY_PROFILE_MESSAGE)) {
+                return $blocked;
+            }
+
             $user->update(['status' => 0]);
 
             return $this->successResponse(null, 'Profile deactivated successfully');

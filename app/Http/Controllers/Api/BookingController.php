@@ -5,22 +5,32 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Asset;
 use App\Models\Booking;
+use App\Models\Scopes\DummyVisibilityScope;
 use App\Models\User;
 use App\Notifications\BookingConfirmedNotification;
 use App\Notifications\BookingRejectedNotification;
 use App\Notifications\BookingSubmittedNotification;
 use App\Notifications\NewBookingAdminNotification;
 use App\Traits\ApiResponse;
+use App\Traits\ProtectsDummyRecords;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
 class BookingController extends Controller
 {
-    use ApiResponse;
+    use ApiResponse, ProtectsDummyRecords;
+
+    /**
+     * Booking IDs run on two sequences so a review booking can never take an
+     * ID out of the real one.
+     */
+    private const ID_PREFIX_REAL = 'BR-';
+    private const ID_PREFIX_DUMMY = 'BR-D-';
 
     /**
      * Display a listing of bookings with search and filters.
@@ -149,50 +159,6 @@ class BookingController extends Controller
                 'id_image_path.required' => 'ID image is required.',
             ]);
 
-            if ($asset->left_quantity <= 0) {
-                return $this->errorResponse('Not Available: No more units of this asset are available.', 422);
-            }
-
-            // Availability Check
-            $newEndWithBuffer = \Illuminate\Support\Carbon::parse($request->end_date)->addHours($asset->buffer_time);
-
-            $overlappingCount = Booking::where('asset_id', $request->asset_id)
-                ->where('status', 'Approved')
-                ->where('start_date', '<', $newEndWithBuffer)
-                ->whereRaw('DATE_ADD(end_date, INTERVAL buffer_time HOUR) > ?', [$request->start_date])
-                ->count();
-
-            if ($overlappingCount >= $asset->quantity) {
-                return $this->errorResponse('Not Available: This asset is fully booked for the selected time slot.', 422);
-            }
-
-            // Handle Payment Image Upload
-            $paymentImagePath = null;
-            if ($request->hasFile('payment_image')) {
-                $file = $request->file('payment_image');
-                $filename = $file->hashName();
-                $file->move(public_path('payments'), $filename);
-                $paymentImagePath = '/payments/' . $filename;
-            }
-
-            // Handle ID Image Upload
-            $idImagePath = null;
-            if ($request->hasFile('id_image_path')) {
-                $file = $request->file('id_image_path');
-                $filename = $file->hashName();
-                $file->move(public_path('payments'), $filename);
-                $idImagePath = '/payments/' . $filename;
-            }
-
-            // Generate custom Booking ID
-            $lastBooking = Booking::latest('id')->first();
-            if ($lastBooking && preg_match('/BR-(\d+)/', $lastBooking->id, $matches)) {
-                $lastId = (int) $matches[1];
-                $newId = 'BR-' . ($lastId + 1);
-            } else {
-                $newId = 'BR-1001';
-            }
-
             // Auto-registration logic
             $phone = trim($request->user_phone);
             $email = strtolower(trim($request->user_email));
@@ -213,6 +179,66 @@ class BookingController extends Controller
 
             $user = $userByPhone;
 
+            // This route is public — the guest booking flow needs it that way —
+            // so a caller may omit the bearer token even while signed in. Decide
+            // from the account behind the phone as well, otherwise a reviewer's
+            // booking would silently be written as real and eat real stock.
+            $isDummy = DummyVisibilityScope::actingUserIsDummy() || (bool) $user?->is_dummy;
+
+            // The review account books real assets but never consumes stock, so
+            // gating it on availability would be meaningless — and would leave a
+            // store reviewer stuck behind the club's genuine inventory levels.
+            if (!$isDummy) {
+                if ($asset->left_quantity <= 0) {
+                    return $this->errorResponse('Not Available: No more units of this asset are available.', 422);
+                }
+
+                // Availability Check — real bookings only, since review bookings
+                // hold nothing and must never block a real customer.
+                $newEndWithBuffer = \Illuminate\Support\Carbon::parse($request->end_date)->addHours($asset->buffer_time);
+
+                $overlappingCount = Booking::realOnly()
+                    ->where('asset_id', $request->asset_id)
+                    ->where('status', 'Approved')
+                    ->where('start_date', '<', $newEndWithBuffer)
+                    ->whereRaw('DATE_ADD(end_date, INTERVAL buffer_time HOUR) > ?', [$request->start_date])
+                    ->count();
+
+                if ($overlappingCount >= $asset->quantity) {
+                    return $this->errorResponse('Not Available: This asset is fully booked for the selected time slot.', 422);
+                }
+            }
+
+            // Handle Payment Image Upload
+            $paymentImagePath = null;
+            if ($request->hasFile('payment_image')) {
+                $file = $request->file('payment_image');
+                $filename = $file->hashName();
+                $file->move(public_path('payments'), $filename);
+                $paymentImagePath = '/payments/' . $filename;
+            }
+
+            // Handle ID Image Upload
+            $idImagePath = null;
+            if ($request->hasFile('id_image_path')) {
+                $file = $request->file('id_image_path');
+                $filename = $file->hashName();
+                $file->move(public_path('payments'), $filename);
+                $idImagePath = '/payments/' . $filename;
+            }
+
+            // Generate custom Booking ID. Compared numerically, not as a string:
+            // 'BR-9' sorts above 'BR-1001' lexicographically.
+            $prefix = $isDummy ? self::ID_PREFIX_DUMMY : self::ID_PREFIX_REAL;
+            $suffixPosition = strlen($prefix) + 1;
+
+            $lastId = (int) Booking::withDummy()
+                ->where('is_dummy', $isDummy)
+                ->where('id', 'like', $prefix . '%')
+                ->max(DB::raw("CAST(SUBSTRING(id, {$suffixPosition}) AS UNSIGNED)"));
+
+            $newId = $prefix . (max($lastId, 1000) + 1);
+
             if (!$user) {
                 $user = User::create([
                     'name' => $request->user_name,
@@ -221,10 +247,12 @@ class BookingController extends Controller
                     'password' => Hash::make(Str::random(16)),
                     'role' => 'Non-Member',
                     'status' => 1,
+                    'is_dummy' => $isDummy,
                 ]);
             }
 
-            // Create Booking (auto-approved by default)
+            // Create Booking (auto-approved by default). `is_dummy` is set from
+            // the viewer here, after the merge, so a request body can't forge it.
             $booking = Booking::create(array_merge($request->except(['payment_image', 'id_image_path']), [
                 'id' => $newId,
                 'user_id' => $user->id,
@@ -232,18 +260,24 @@ class BookingController extends Controller
                 'buffer_time' => $asset->buffer_time,
                 'payment_image' => $paymentImagePath,
                 'id_image_path' => $idImagePath,
+                'is_dummy' => $isDummy,
             ]));
 
-            // Decrement asset left_quantity since booking is auto-approved
-            if ($asset->left_quantity > 0) {
+            // Decrement asset left_quantity since booking is auto-approved.
+            // Review bookings leave real inventory exactly as they found it.
+            if (!$isDummy && $asset->left_quantity > 0) {
                 $asset->decrement('left_quantity');
             }
 
             $booking->load(['asset', 'user', 'referrer']);
 
-            // Notify all Super Admins
-            $admins = User::where('role', 'Super Admin')->get();
-            Notification::send($admins, new NewBookingAdminNotification($booking));
+            // Notify all Super Admins — review bookings are invisible to them,
+            // so paging them about one would only cause confusion.
+            if (!$isDummy) {
+                $admins = User::where('role', 'Super Admin')->get();
+                Notification::send($admins, new NewBookingAdminNotification($booking));
+            }
+
             $user->notify(new BookingConfirmedNotification($booking));
 
             return $this->successResponse($this->formatBooking($booking), 'Your booking has been approved successfully.', 201);
@@ -268,6 +302,10 @@ class BookingController extends Controller
             ]);
 
             $booking = Booking::with(['user', 'asset'])->findOrFail($request->id);
+
+            if ($blocked = $this->blockIfDummy($booking)) {
+                return $blocked;
+            }
 
             $wasApproved = $booking->status === 'Approved';
             $booking->update([
@@ -307,6 +345,10 @@ class BookingController extends Controller
         $request->validate([
             'status' => 'required|in:Approved,Rejected',
         ]);
+
+        if ($blocked = $this->blockIfDummy($booking)) {
+            return $blocked;
+        }
 
         $booking->loadMissing(['user', 'asset']);
         $previousStatus = $booking->status;
@@ -454,6 +496,7 @@ class BookingController extends Controller
             'status' => $booking->status,
             'buffer_time' => $booking->buffer_time,
             'rejection_reason' => $booking->rejection_reason,
+            'is_dummy' => $booking->is_dummy,
             'created_at' => $booking->created_at,
         ];
     }

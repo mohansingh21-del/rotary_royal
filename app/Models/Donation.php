@@ -6,11 +6,12 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Project;
 
+use App\Models\Concerns\HasDummyVisibility;
 use App\Traits\SerializeLocalDates;
 
 class Donation extends Model
 {
-    use HasFactory, SerializeLocalDates;
+    use HasFactory, SerializeLocalDates, HasDummyVisibility;
 
     protected $fillable = [
         'project_id',
@@ -21,7 +22,13 @@ class Donation extends Model
         'time',
         'foundation_name',
         'is_marquee',
+        'is_dummy',
         'payment_receipt',
+    ];
+
+    protected $casts = [
+        'is_marquee' => 'boolean',
+        'is_dummy' => 'boolean',
     ];
 
     public function project()
