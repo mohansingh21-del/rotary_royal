@@ -52,6 +52,17 @@ Route::prefix('v1')->group(function () {
     Route::post('bookings', [BookingController::class, 'store']);
     Route::post('donations', [DonationController::class, 'store']);
 
+    // Deliberately unauthenticated at the product owner's request: this
+    // deactivates whichever account `user_id` names, with no proof the caller
+    // owns it, so any id that can be guessed can be disabled by anyone. The
+    // throttle only slows bulk enumeration; it does not make the route safe.
+    //
+    // No whereNumber() constraint on purpose: the endpoint must answer HTTP 200
+    // for every outcome, and a router-level rejection would be a 404. The
+    // controller validates the id itself and reports 422 inside the body.
+    Route::get('user/profile/deactivate/{user_id}', [ProfileController::class, 'deactivate'])
+        ->middleware('throttle:10,1');
+
     // --- Shared Authenticated Routes (all users) ---
     Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('auth/logout', [AuthController::class, 'logout']);
@@ -150,7 +161,6 @@ Route::prefix('v1')->group(function () {
         Route::get('profile', [ProfileController::class, 'profile']);
 
         Route::post('profile/update', [ProfileController::class, 'updateProfile']);
-        Route::patch('profile/deactivate', [ProfileController::class, 'deactivate']);
         Route::prefix('notifications')->group(function () {
             Route::get('/', [NotificationController::class, 'index']);
             Route::post('{id}/read', [NotificationController::class, 'markAsRead']);

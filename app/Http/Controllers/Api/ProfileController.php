@@ -12,6 +12,7 @@ use Exception;
 use App\Traits\ApiResponse;
 use App\Traits\ProtectsDummyRecords;
 use App\Models\Members;
+use App\Models\User;
 use Illuminate\Support\Facades\Storage;
 
 class ProfileController extends Controller
@@ -132,22 +133,57 @@ class ProfileController extends Controller
         }
     }
 
-    public function deactivate(Request $request)
+    /**
+     * Public, token-less by explicit product decision. There is no session and
+     * no ownership check: the caller names an account by id and it is disabled.
+     * Anyone who can guess an id can deactivate that member, and a deactivated
+     * member cannot log back in — findUserForOtp() only resolves active users,
+     * so every recovery is a manual database edit. Restoring authentication is
+     * the only real fix; the throttle on the route merely slows enumeration.
+     *
+     * Every outcome answers HTTP 200. The real code — 422, 404, 403, 500 — is
+     * carried in the body's `status` field, so callers must read the payload
+     * rather than the transport status to tell success from failure.
+     */
+    public function deactivate(Request $request, $userId)
     {
         try {
-            $user = $request->user();
+            // The id arrives as a route segment, which $request->validate() does
+            // not see, so it is validated here by hand. The route deliberately
+            // drops whereNumber(): a segment rejected by the router would 404 at
+            // the transport level, which is the one status this endpoint must
+            // never emit.
+            $validator = Validator::make(['user_id' => $userId], [
+                'user_id' => 'required|integer|min:1',
+            ]);
 
-            // Deactivating would set status = 0, and the OTP login requires an
-            // active user — the review account would lock itself out for good.
+            if ($validator->fails()) {
+                return $this->errorResponse('Validation error', 422, $validator->errors())
+                    ->setStatusCode(200);
+            }
+
+            $user = User::find($userId);
+
+            if (!$user) {
+                return $this->errorResponse('User not found', 404)->setStatusCode(200);
+            }
+
+            // Deactivating sets status = 0, and the OTP login requires an active
+            // user — the review account would lock itself out for good.
             if ($blocked = $this->blockIfDummy($user, self::DUMMY_PROFILE_MESSAGE)) {
-                return $blocked;
+                return $blocked->setStatusCode(200);
             }
 
             $user->update(['status' => 0]);
 
+            // Without this, an already-issued app token keeps working against
+            // every other endpoint even though the account is disabled.
+            $user->tokens()->delete();
+
             return $this->successResponse(null, 'Profile deactivated successfully');
         } catch (Exception $e) {
-            return $this->errorResponse('Failed to deactivate profile: ' . $e->getMessage(), 500);
+            return $this->errorResponse('Failed to deactivate profile: ' . $e->getMessage(), 500)
+                ->setStatusCode(200);
         }
     }
 }
